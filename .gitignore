@@ -1,0 +1,36 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+*.local
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (even if you don’t use them now)
+.env
+.env.*
+!.env.example
+
+# Husky
+.husky/_
+
+# Misc
+coverage/
