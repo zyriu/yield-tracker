@@ -1,20 +1,28 @@
 import type { FetchPositions, Position } from "./types";
 
-// API: /core/v1/dashboard/positions/database/{user}
-const PENDLE_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
+// Dashboard positions endpoint
+const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
+
+// Market‑data endpoint base.  The documentation for this endpoint shows it
+// returns APY metrics such as impliedApy, ytFloatingApy and aggregatedApy:contentReference[oaicite:1]{index=1}.
+const PENDLE_MARKET_DATA_BASE = "https://api-v2.pendle.finance/core/v2";
 
 type AnyObj = Record<string, any>;
 
+// Map chain IDs from the API to chain names used in our app
 const CHAIN_MAP: Record<number, Position["chain"] | "skip"> = {
   1: "ethereum",
   42161: "arbitrum",
-  // keep others as "skip" for now — we only ingest ETH/ARB from this endpoint
+  999: "hyperliquid",
+  // Other chains are skipped for now
 };
 
+// Convert any type to a number if possible
 function toNumber(x: any): number | undefined {
   const n = Number(x);
   return Number.isFinite(n) ? n : undefined;
 }
+// Convert a value to BigInt, defaulting to 0n on failure
 function toBigIntOrZero(x: any): bigint {
   try {
     if (typeof x === "bigint") return x;
@@ -23,89 +31,25 @@ function toBigIntOrZero(x: any): bigint {
   } catch {}
   return 0n;
 }
+// Shorten a market address for asset labels
 function shortMarket(marketId: string): string {
   const addr = marketId.split("-")[1] || marketId;
   const core = addr.startsWith("0x") ? addr.slice(2) : addr;
   return core.slice(0, 6);
 }
+// Construct an asset label such as "PT-0123ab"
 function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
   return `${kind.toUpperCase()}-${shortMarket(marketId)}`;
 }
 
-/** ---- Local snapshot storage (browser-only) for Pendle yield calc ---- */
-type Snap = { t: number; v: number }; // timestamp ms, valueUSD
-type SnapMap = Record<string, Snap[]>; // key -> array sorted asc by t
-const LS_KEY = "pendle-snapshots-v1";
-
-function loadSnaps(): SnapMap {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw);
-    return typeof obj === "object" && obj ? (obj as SnapMap) : {};
-  } catch {
-    return {};
-  }
-}
-function saveSnaps(s: SnapMap) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(s));
-  } catch {}
-}
-function pushSnap(key: string, v: number, now = Date.now()) {
-  const s = loadSnaps();
-  const arr = s[key] || [];
-  // drop duplicates within 3 hours
-  const THREE_H = 3 * 60 * 60 * 1000;
-  if (arr.length === 0 || now - arr[arr.length - 1].t > THREE_H) {
-    arr.push({ t: now, v });
-  } else {
-    arr[arr.length - 1] = { t: now, v };
-  }
-  // keep last ~60 days worth (coarse)
-  const SIXTY_D = 60 * 24 * 60 * 60 * 1000;
-  const cutoff = now - SIXTY_D;
-  s[key] = arr.filter((x) => x.t >= cutoff);
-  saveSnaps(s);
-}
-function findSnapshotNear(key: string, targetAgeDays: number, wiggleDays = 2): Snap | undefined {
-  const s = loadSnaps();
-  const arr = s[key];
-  if (!arr || arr.length === 0) return undefined;
-  const now = Date.now();
-  const targetT = now - targetAgeDays * 24 * 60 * 60 * 1000;
-  const minT = now - (targetAgeDays + wiggleDays) * 24 * 60 * 60 * 1000;
-  const maxT = now - (targetAgeDays - wiggleDays) * 24 * 60 * 60 * 1000;
-  // pick the closest snapshot whose t in [minT, maxT]; fallback to the oldest if still before target
-  let best: Snap | undefined;
-  let bestDelta = Infinity;
-  for (const s of arr) {
-    if (s.t < minT || s.t > maxT) continue;
-    const d = Math.abs(s.t - targetT);
-    if (d < bestDelta) {
-      best = s;
-      bestDelta = d;
-    }
-  }
-  if (best) return best;
-  // fallback: choose the snapshot just before targetT if exists
-  let prev: Snap | undefined;
-  for (const s0 of arr) {
-    if (!prev || (s0.t <= targetT && s0.t > prev.t)) prev = s0;
-  }
-  return prev;
-}
-function annualizeSimple(periodReturn: number, days: number): number {
-  return periodReturn * (365 / days);
-}
-function annualizeCompounded(periodReturn: number, days: number): number {
-  return Math.pow(1 + periodReturn, 365 / days) - 1;
-}
-
-/** ------------------------------------------------------------------- */
-
+/**
+ * Fetch Pendle positions for a given wallet.
+ * Instead of using local snapshots to compute APR, we call Pendle’s market
+ * data endpoint to obtain annualized yields (APYs).  Those APYs are used
+ * as the 7‑day APR, 30‑day APR and 30‑day APY for each position.
+ */
 export const fetchPendlePositions: FetchPositions = async ({ address }) => {
-  const url = `${PENDLE_API}/${address.toLowerCase()}`;
+  const url = `${PENDLE_POSITIONS_API}/${address.toLowerCase()}`;
   let json: AnyObj;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });
@@ -119,11 +63,38 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   if (positionsArr.length === 0) return [];
 
   const out: Position[] = [];
-  const nowMs = Date.now();
 
+  // Cache market‑level APY data per marketId to avoid repeated network calls
+  const marketDataCache: Record<string, any> = {};
+
+  // Helper to fetch APY metrics for a market
+  async function getMarketData(marketId: string): Promise<any | undefined> {
+    if (marketId in marketDataCache) return marketDataCache[marketId];
+    const [chainIdStr, marketAddr] = marketId.split("-");
+    if (!chainIdStr || !marketAddr) {
+      marketDataCache[marketId] = undefined;
+      return undefined;
+    }
+    const api = `${PENDLE_MARKET_DATA_BASE}/${chainIdStr}/markets/${marketAddr}/data`;
+    try {
+      const res = await fetch(api, { headers: { accept: "application/json" } });
+      if (res.ok) {
+        const data = await res.json();
+        marketDataCache[marketId] = data;
+        return data;
+      }
+    } catch {
+      // ignore network errors
+    }
+    marketDataCache[marketId] = undefined;
+    return undefined;
+  }
+
+  // Iterate through chain buckets and positions
   for (const chainBucket of positionsArr) {
     const chainId = toNumber(chainBucket?.chainId);
-    const chain = chainId && CHAIN_MAP[chainId] ? CHAIN_MAP[chainId] : "skip";
+    const chain: Position["chain"] | "skip" =
+      chainId && CHAIN_MAP[chainId] ? CHAIN_MAP[chainId] : "skip";
     if (chain === "skip") continue;
 
     const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions)
@@ -132,6 +103,10 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     for (const op of opens) {
       const marketId: string = String(op?.marketId || "");
 
+      // Pre‑fetch market APY data once per market
+      const marketData = await getMarketData(marketId);
+
+      // Each position may have PT, YT or LP legs; handle each separately
       const legs: Array<["pt" | "yt" | "lp", AnyObj | undefined]> = [
         ["pt", op?.pt],
         ["yt", op?.yt],
@@ -144,28 +119,39 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
         const valuation = toNumber(leg.valuation) ?? 0;
         const balanceBI = toBigIntOrZero(leg.balance);
         const activeBI = toBigIntOrZero(leg.activeBalance);
+        // Skip zero‑value or zero‑balance legs
         if (valuation <= 0 && balanceBI === 0n && activeBI === 0n) continue;
 
         const asset = assetLabel(kind, marketId);
-        const key = `${address.toLowerCase()}|${marketId}|${kind}`;
 
-        // push current snapshot for later periods
-        if (valuation > 0) pushSnap(key, valuation, nowMs);
-
-        // compute 7d / 30d from snapshots if available
         let apr7d: number | undefined;
         let apr30d: number | undefined;
         let apy30d: number | undefined;
-        const snap7 = findSnapshotNear(key, 7);
-        const snap30 = findSnapshotNear(key, 30);
-        if (valuation > 0 && snap7 && snap7.v > 0) {
-          const r7 = valuation / snap7.v - 1;
-          apr7d = annualizeSimple(r7, 7);
-        }
-        if (valuation > 0 && snap30 && snap30.v > 0) {
-          const r30 = valuation / snap30.v - 1;
-          apr30d = annualizeSimple(r30, 30);
-          apy30d = annualizeCompounded(r30, 30);
+
+        // Derive APR/APY from market metrics based on the leg type
+        if (marketData) {
+          if (kind === "pt") {
+            const implied = toNumber(marketData.impliedApy);
+            if (implied !== undefined) {
+              apr7d = implied;
+              apr30d = implied;
+              apy30d = implied;
+            }
+          } else if (kind === "yt") {
+            const ytFloat = toNumber(marketData.ytFloatingApy);
+            if (ytFloat !== undefined) {
+              apr7d = ytFloat;
+              apr30d = ytFloat;
+              apy30d = ytFloat;
+            }
+          } else if (kind === "lp") {
+            const agg = toNumber(marketData.aggregatedApy);
+            if (agg !== undefined) {
+              apr7d = agg;
+              apr30d = agg;
+              apy30d = agg;
+            }
+          }
         }
 
         out.push({
