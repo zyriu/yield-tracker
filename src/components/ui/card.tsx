@@ -14,7 +14,9 @@ export function CardHeader({ children, className }: PropsWithChildren<{ classNam
 }
 
 export function CardTitle({ children, className }: PropsWithChildren<{ className?: string }>) {
-  return <h3 className={clsx("text-base font-semibold", className)}>{children}</h3>;
+  return (
+    <h3 className={clsx("text-base font-semibold whitespace-nowrap", className)}>{children}</h3>
+  );
 }
 
 export function CardContent({ children, className }: PropsWithChildren<{ className?: string }>) {

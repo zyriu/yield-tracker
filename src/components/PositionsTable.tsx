@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import EmptyState from "./EmptyState";
 import LoadingSkeleton from "./LoadingSkeleton";
@@ -12,12 +12,28 @@ import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatUSD, formatPct, shortAddress } from "@/utils/format";
 
+// Helper to fetch positions across multiple protocols for all addresses
 const fetchAll = async (addresses: string[]) => {
   const protocols = Object.keys(adapters);
   const res = await Promise.all(
     addresses.map((addr) => fetchPositionsForAddress(addr, protocols))
   );
   return res.flat();
+};
+
+// Map each chain to its corresponding CoinGecko ID for icon fetching
+const chainToCoingeckoId: Record<string, string> = {
+  ethereum: "ethereum",
+  arbitrum: "arbitrum",
+  hyperliquid: "hyperliquid",
+};
+
+// Dashboard URLs for protocol names
+const protocolLinks: Record<string, string> = {
+  pendle: "https://app.pendle.finance",
+  ethena: "https://app.ethena.fi",
+  spark: "https://app.spark.fi",
+  sky: "https://app.sky.money",
 };
 
 export default function PositionsTable() {
@@ -51,6 +67,7 @@ export default function PositionsTable() {
   const displayOwner = (addr: string) =>
     labelFor[addr.toLowerCase()] || shortAddress(addr);
 
+  // Group positions either by protocol or by wallet address
   const grouped = useMemo(() => {
     if (!data) return [];
     if (groupMode === "protocol") {
@@ -88,25 +105,57 @@ export default function PositionsTable() {
     }
   }, [data, groupMode, labelFor]);
 
-  // Column widths for: owner/protocol, asset, chain, 7d APR, 30d APR, 30d APY, value, link
+  // State for chain icons fetched from CoinGecko
+  const [chainIcons, setChainIcons] = useState<Record<string, string>>({});
+
+  // Fetch icons when new chains appear in the data
+  useEffect(() => {
+    const uniqueChains = Array.from(
+      new Set(data?.map((p) => p.chain) || [])
+    );
+    uniqueChains.forEach((chain) => {
+      if (chainIcons[chain]) return;
+      const id = chainToCoingeckoId[chain];
+      if (!id) return;
+      fetch(`https://api.coingecko.com/api/v3/coins/${id}`)
+        .then((res) => res.json())
+        .then((json) => {
+          const icon =
+            json?.image?.small ||
+            json?.image?.thumb ||
+            json?.image?.large ||
+            "";
+          if (icon) {
+            setChainIcons((prev) => ({ ...prev, [chain]: icon }));
+          }
+        })
+        .catch(() => {
+          // ignore errors
+        });
+    });
+  }, [data, chainIcons]);
+
+  // Column widths: owner/protocol, asset, source, chain, APY, value, current yield
   const Cols = () => (
     <colgroup>
       <col style={{ width: "18%" }} />
+      <col style={{ width: "14%" }} />
       <col style={{ width: "12%" }} />
-      <col style={{ width: "8%" }} />
       <col style={{ width: "10%" }} />
-      <col style={{ width: "10%" }} />
-      <col style={{ width: "10%" }} />
-      <col style={{ width: "22%" }} />
+      <col style={{ width: "18%" }} />
+      <col style={{ width: "18%" }} />
       <col style={{ width: "10%" }} />
     </colgroup>
   );
+
+  // Choose an APY value in order of preference
+  const getApy = (p: any) => p.apy30d ?? p.apr30d ?? p.apr7d;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between w-full gap-3">
-          <CardTitle>Your Positions</CardTitle>
+          <CardTitle>Positions</CardTitle>
           <div className="flex items-center gap-3 flex-nowrap whitespace-nowrap">
             <span className="text-xs text-text-muted">Group by</span>
             <Select
@@ -155,9 +204,9 @@ export default function PositionsTable() {
                   <div className="text-sm font-semibold capitalize">
                     {g.title}
                   </div>
-                  <div className="text-sm text-text-muted">
+                  <div className="text-sm font-medium text-white">
                     Total:{" "}
-                    <span className="font-medium">{formatUSD(g.total)}</span>
+                    <span className="font-semibold">{formatUSD(g.total)}</span>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -168,55 +217,86 @@ export default function PositionsTable() {
                         {groupMode === "protocol" ? (
                           <>
                             <th className="py-2 px-3">Wallet</th>
-                            <th className="py-2 px-3">Asset</th>
+                            <th className="py-2 px-3 text-center">Asset</th>
                           </>
                         ) : (
                           <>
                             <th className="py-2 px-3">Protocol</th>
-                            <th className="py-2 px-3">Asset</th>
+                            <th className="py-2 px-3 text-center">Asset</th>
                           </>
                         )}
-                        <th className="py-2 px-3">Chain</th>
-                        <th className="py-2 px-3">7d APR</th>
-                        <th className="py-2 px-3">30d APR</th>
-                        <th className="py-2 px-3">30d APY</th>
-                        <th className="py-2 px-3">Value</th>
-                        <th className="py-2 px-3"></th>
+                        <th className="py-2 px-3 text-center">Source</th>
+                        <th className="py-2 px-3 text-center">Chain</th>
+                        <th className="py-2 px-3 text-center">APY</th>
+                        <th className="py-2 px-3 text-center">Value</th>
+                        <th className="py-2 px-3 text-right">Current yield</th>
                       </tr>
                     </thead>
                     <tbody>
                       {g.rows.map((p, i) => (
                         <tr key={i} className="border-t border-white/10">
                           {groupMode === "protocol" ? (
-                            <td className="py-2 px-3">{displayOwner(p.address)}</td>
+                            <td className="py-2 px-3">
+                              {displayOwner(p.address)}
+                            </td>
                           ) : (
-                            <td className="py-2 px-3 capitalize">{p.protocol}</td>
+                            <td className="py-2 px-3 capitalize">
+                              {protocolLinks[p.protocol] ? (
+                                <a
+                                  href={protocolLinks[p.protocol]}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-brand hover:underline capitalize"
+                                >
+                                  {p.protocol}
+                                </a>
+                              ) : (
+                                p.protocol
+                              )}
+                            </td>
                           )}
-                          <td className="py-2 px-3 truncate">{p.asset}</td>
-                          <td className="py-2 px-3 capitalize">{p.chain}</td>
-                          <td className="py-2 px-3">
-                            {p.apr7d !== undefined ? formatPct(p.apr7d) : "-"}
+                          <td className="py-2 px-3 text-center truncate">
+                            {p.asset}
                           </td>
-                          <td className="py-2 px-3">
-                            {p.apr30d !== undefined ? formatPct(p.apr30d) : "-"}
+                          <td className="py-2 px-3 text-center">
+                            {p.marketProtocol ?? "-"}
                           </td>
-                          <td className="py-2 px-3">
-                            {p.apy30d !== undefined ? formatPct(p.apy30d) : "-"}
+                          <td className="py-2 px-3 text-center capitalize">
+                            {chainIcons[p.chain] ? (
+                              <div className="inline-flex items-center justify-center w-6 h-6 bg-white/10 rounded-full">
+                                <img
+                                  src={chainIcons[p.chain]}
+                                  alt={p.chain}
+                                  className="w-4 h-4"
+                                />
+                              </div>
+                            ) : (
+                              p.chain
+                            )}
                           </td>
-                          <td className="py-2 px-3 tabular-nums">
+                          <td className="py-2 px-3 text-center">
+                            {(() => {
+                              const apy = getApy(p);
+                              if (apy === undefined) return "-";
+                              const isYT = p.asset.startsWith("YT-");
+                              const colorClass =
+                                isYT && apy <= -1
+                                  ? "text-red-500"
+                                  : isYT && apy < 0
+                                  ? "text-orange-500"
+                                  : "";
+                              return (
+                                <span className={colorClass}>
+                                  {formatPct(apy)}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="py-2 px-3 text-center tabular-nums">
                             {formatUSD(p.valueUSD)}
                           </td>
-                          <td className="py-2 px-3">
-                            {p.detailsUrl && (
-                              <a
-                                href={p.detailsUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-brand hover:underline"
-                              >
-                                View
-                              </a>
-                            )}
+                          <td className="py-2 px-3 text-right">
+                            {p.claimableRewards ?? "-"}
                           </td>
                         </tr>
                       ))}
@@ -225,12 +305,6 @@ export default function PositionsTable() {
                 </div>
               </div>
             ))}
-            <div className="text-right text-sm text-text-muted">
-              Grand Total:{" "}
-              <span className="font-medium">
-                {formatUSD(grouped.reduce((acc, g) => acc + (g.total || 0), 0))}
-              </span>
-            </div>
           </div>
         )}
       </CardContent>

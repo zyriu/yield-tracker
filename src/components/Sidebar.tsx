@@ -8,9 +8,9 @@ import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { shortAddress } from "@/utils/format";
 
-
 export default function Sidebar() {
   const open = useUIStore((s) => s.sidebarOpen);
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const addresses = useSessionStore((s) => s.addresses);
   const addAddress = useSessionStore((s) => s.addAddress);
   const removeAddress = useSessionStore((s) => s.removeAddress);
@@ -37,12 +37,17 @@ export default function Sidebar() {
   return (
     <aside
       className={`${
-        open ? "w-72" : "w-14"
-      } transition-all duration-200 border-r border-white/10 bg-bg-muted`}
+        open ? "w-80" : "w-0"
+      } fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/10 bg-bg-muted`}
     >
-      <div className="p-3 text-xs text-text-muted">
-        {open ? "Tracked Addresses" : "Addr"}
-      </div>
+      {open && (
+        <div className="flex items-center justify-between p-3 text-xs text-text-muted m-3">
+          <h2 className="text-lg font-semibold text-white">Tracked Addresses</h2>
+          <button onClick={toggleSidebar} aria-label="Close sidebar" className="text-xl">
+            &times;
+          </button>
+        </div>
+      )}
 
       <div className={clsx("px-3 space-y-2", open ? "block" : "hidden")}>
         <Input ref={refAddr} placeholder="0x…" aria-label="Address" />
@@ -96,9 +101,7 @@ export default function Sidebar() {
                           {displayTop}
                         </div>
                         {displayBottom && (
-                          <div className="text-xs text-text-muted font-mono">
-                            {displayBottom}
-                          </div>
+                          <div className="text-xs text-text-muted font-mono">{displayBottom}</div>
                         )}
                       </>
                     ) : (
