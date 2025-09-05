@@ -30,17 +30,25 @@ export default function PortfolioSummaryCard() {
   });
 
   // Fetch BTC and SOL prices from CoinGecko (denominated in USD)
-  const [prices, setPrices] = useState<{ btc: number | null; sol: number | null }>({
+  const [prices, setPrices] = useState<{
+    btc: number | null;
+    eth: number | null;
+    sol: number | null;
+  }>({
     btc: null,
+    eth: null,
     sol: null,
   });
 
   useEffect(() => {
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,solana&vs_currencies=usd")
+    fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd"
+    )
       .then((res) => res.json())
       .then((json) => {
         setPrices({
           btc: json?.bitcoin?.usd ?? null,
+          eth: json?.ethereum?.usd ?? null,
           sol: json?.solana?.usd ?? null,
         });
       })
@@ -50,7 +58,7 @@ export default function PortfolioSummaryCard() {
   }, []);
 
   // State for selected denomination (usd, btc or sol)
-  const [currency, setCurrency] = useState<"usd" | "btc" | "sol">("usd");
+  const [currency, setCurrency] = useState<"usd" | "btc" | "eth" | "sol">("usd");
 
   // Sum the USD value of all positions
   const totalUSD = useMemo(() => {
@@ -78,6 +86,7 @@ export default function PortfolioSummaryCard() {
   // Determine conversion price based on selected currency
   let denomPrice: number | null = 1;
   if (currency === "btc") denomPrice = prices.btc;
+  if (currency === "eth") denomPrice = prices.eth;
   if (currency === "sol") denomPrice = prices.sol;
 
   // Convert total and nominal yields into the selected currency
@@ -92,6 +101,7 @@ export default function PortfolioSummaryCard() {
     if (val === null) return "-";
     if (currency === "usd") return formatUSD(val);
     if (currency === "btc") return `${val.toFixed(6)} BTC`;
+    if (currency === "eth") return `${val.toFixed(6)} ETH`;
     if (currency === "sol") return `${val.toFixed(6)} SOL`;
     return val.toString();
   }
@@ -105,10 +115,11 @@ export default function PortfolioSummaryCard() {
             <span className="text-xs text-text-muted">Denominator</span>
             <Select
               value={currency}
-              onChange={(e) => setCurrency(e.target.value as "usd" | "btc" | "sol")}
+              onChange={(e) => setCurrency(e.target.value as "usd" | "btc" | "eth" | "sol")}
             >
               <option value="usd">USD</option>
               <option value="btc">BTC</option>
+              <option value="eth">ETH</option>
               <option value="sol">SOL</option>
             </Select>
           </div>
