@@ -2,55 +2,25 @@ import { formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
 
-import { multicall } from "@/lib/multicall"; // Address of the sUSDe vault on Ethereum mainnet
+import { multicall } from "@/lib/multicall";
 import { getUSDePrice } from "@/lib/prices";
 import { publicClient } from "@/lib/viem";
-
-// Address of the sUSDe vault on Ethereum mainnet
-const SUSDE = "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497" as const;
-
-// Minimal ABI needed for Ethena’s vault interactions
-const ABI = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "owner", type: "address" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "convertToAssets",
-    stateMutability: "view",
-    inputs: [{ name: "shares", type: "uint256" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "decimals",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "uint8" }],
-  },
-] as const;
+import { ETHENA_ABI, SUSDE } from "@/lib/web3";
 
 // ≈12s blocks
 const BLOCKS_7D = 50_400n;
 const BLOCKS_30D = 216_000n;
 
-/**
- * Fetch an Ethena position for the given wallet.  Uses multicall to
- * batch contract reads where possible to minimise RPC overhead.  Yields
- * are computed by sampling the price per share (pps) over 7- and
- * 30‑day windows.  Historical pps reads still require individual
- * contract calls because multicall cannot target multiple block
- * heights in a single request.
- */
 export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
   // Batch the first two calls: sUSDe balance and decimals.
   const [rawShares, rawDecimals] = (await multicall([
-    { address: SUSDE, abi: ABI, functionName: "balanceOf", args: [address as `0x${string}`] },
-    { address: SUSDE, abi: ABI, functionName: "decimals" },
+    {
+      address: SUSDE,
+      abi: ETHENA_ABI,
+      functionName: "balanceOf",
+      args: [address as `0x${string}`],
+    },
+    { address: SUSDE, abi: ETHENA_ABI, functionName: "decimals" },
   ])) as [bigint, number];
 
   // If no shares, return empty array
@@ -63,8 +33,8 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
 
   // Batch convertToAssets for both the user’s full balance and a single share to get PPS
   const [assetsNow, oneShareAssetsNow] = (await multicall([
-    { address: SUSDE, abi: ABI, functionName: "convertToAssets", args: [shares] },
-    { address: SUSDE, abi: ABI, functionName: "convertToAssets", args: [1n] },
+    { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [shares] },
+    { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n] },
   ])) as [bigint, bigint];
 
   const usdePrice = await getUSDePrice();
@@ -85,14 +55,14 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
     // returns the assets for a single share at the specified block.
     const ppsPast7Raw = (await publicClient.readContract({
       address: SUSDE,
-      abi: ABI,
+      abi: ETHENA_ABI,
       functionName: "convertToAssets",
       args: [1n],
       blockNumber: past7,
     })) as bigint;
     const ppsPast30Raw = (await publicClient.readContract({
       address: SUSDE,
-      abi: ABI,
+      abi: ETHENA_ABI,
       functionName: "convertToAssets",
       args: [1n],
       blockNumber: past30,

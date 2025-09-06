@@ -5,9 +5,6 @@ import { fetchSparkPositions } from "./spark";
 
 import type { FetchPositions, Protocol } from "./types";
 
-/**
- * Registry of protocol adapters.  Each entry must implement FetchPositions.
- */
 export const adapters: Record<Protocol, FetchPositions> = {
   pendle: fetchPendlePositions,
   ethena: fetchEthenaPositions,
@@ -15,9 +12,6 @@ export const adapters: Record<Protocol, FetchPositions> = {
   sky: fetchSkyPositions,
 };
 
-/**
- * Fetch positions for a wallet across an arbitrary list of protocols.
- */
 export async function fetchPositionsForAddress(address: string, protocols: string[]) {
   const results: Promise<any[]>[] = [];
   for (const protocol of protocols) {

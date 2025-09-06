@@ -42,10 +42,19 @@ export default function PositionsTable() {
   const groupMode = useUIStore((s) => s.groupMode);
   const setGroupMode = useUIStore((s) => s.setGroupMode);
 
-  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["positions", addresses, rpc],
     queryFn: () => fetchAll(addresses),
     enabled: addresses.length > 0,
+    staleTime: 60_000, // cache positions for 1 minute
+    cacheTime: 120_000,
   });
 
   const labelFor = useMemo(
@@ -144,7 +153,9 @@ export default function PositionsTable() {
       </CardHeader>
       <CardContent>
         {isLoading && <LoadingSkeleton />}
-        {isError && <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>}
+        {isError && (
+          <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>
+        )}
         {!isLoading && !isError && (!data || data.length === 0) && (
           <EmptyState title="No positions found" hint="Add an address to start tracking." />
         )}
@@ -203,11 +214,17 @@ export default function PositionsTable() {
                             </td>
                           )}
                           <td className="py-2 px-3 text-center truncate">{p.asset}</td>
-                          <td className="py-2 px-3 text-center">{p.marketProtocol ?? "-"}</td>
+                          <td className="py-2 px-3 text-center">
+                            {p.marketProtocol ?? "-"}
+                          </td>
                           <td className="py-2 px-3 text-center capitalize">
                             {chainIcons[p.chain] ? (
                               <div className="inline-flex items-center justify-center w-6 h-6 bg-white/10 rounded-full">
-                                <img src={chainIcons[p.chain]} alt={p.chain} className="w-4 h-4" />
+                                <img
+                                  src={chainIcons[p.chain]}
+                                  alt={p.chain}
+                                  className="w-4 h-4"
+                                />
                               </div>
                             ) : (
                               p.chain
@@ -222,15 +239,17 @@ export default function PositionsTable() {
                                 isYT && apy <= -0.99
                                   ? "text-red-500"
                                   : isYT && apy < 0
-                                    ? "text-orange-500"
-                                    : "";
+                                  ? "text-orange-500"
+                                  : "";
                               return <span className={colorClass}>{formatPct(apy)}</span>;
                             })()}
                           </td>
                           <td className="py-2 px-3 text-center tabular-nums">
                             {formatUSD(p.valueUSD)}
                           </td>
-                          <td className="py-2 px-3 text-right">{p.claimableRewards ?? "-"}</td>
+                            <td className="py-2 px-3 text-right">
+                            {p.claimableRewards ?? "-"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

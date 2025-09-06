@@ -9,9 +9,6 @@ import { getPricesUSD } from "@/lib/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 import { formatPct, formatUSD } from "@/utils/format";
 
-/**
- * Fetch positions across all protocols for an array of wallet addresses.
- */
 const fetchAllPositions = async (addresses: string[]) => {
   const protocols = Object.keys(adapters);
   const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols)));
@@ -24,18 +21,22 @@ export default function PortfolioSummaryCard() {
   const rpc = useSessionStore((s) => s.rpcUrl);
 
   // Query all positions for the tracked addresses
-  const { data } = useQuery({
+  const { data: positions, isLoading: positionsLoading } = useQuery({
     queryKey: ["portfolio-summary", addresses, rpc],
     queryFn: () => fetchAllPositions(addresses),
     enabled: addresses.length > 0,
+    staleTime: 60_000, // cache positions for 1 minute
+    cacheTime: 120_000,
   });
 
   // Fetch USDe, BTC, ETH and SOL prices from CoinGecko using a single call.
-  // This hook returns a price map keyed by asset symbol. If the fetch fails or
-  // is still loading, the values will be undefined.
-  const { data: priceData } = useQuery({
+  // This hook returns a price map keyed by asset symbol. If the fetch fails
+  // or is still loading, the values will be undefined.
+  const { data: priceData, isLoading: pricesLoading } = useQuery({
     queryKey: ["coingecko-prices"],
     queryFn: getPricesUSD,
+    staleTime: 1000 * 60 * 60 * 6, // 6 hours
+    cacheTime: 1000 * 60 * 60 * 6,
   });
 
   // State for selected denomination (usd, btc, eth or sol)
@@ -43,16 +44,16 @@ export default function PortfolioSummaryCard() {
 
   // Sum the USD value of all positions
   const totalUSD = useMemo(() => {
-    if (!data) return 0;
-    return data.reduce((acc, p) => acc + (p.valueUSD || 0), 0);
-  }, [data]);
+    if (!positions) return 0;
+    return positions.reduce((acc, p) => acc + (p.valueUSD || 0), 0);
+  }, [positions]);
 
   // Calculate weighted average yield and nominal yield (in USD)
   const { weightedYield, nominalYieldUSD } = useMemo(() => {
-    if (!data || data.length === 0) return { weightedYield: 0, nominalYieldUSD: 0 };
+    if (!positions || positions.length === 0) return { weightedYield: 0, nominalYieldUSD: 0 };
     let weightedSum = 0;
     let nominalSum = 0;
-    data.forEach((p) => {
+    positions.forEach((p) => {
       const val = p.valueUSD || 0;
       // Determine the position's APR/APY (prefer 30d APY, then 30d APR, then 7d APR)
       let apy = p.apy30d ?? p.apr30d ?? p.apr7d ?? 0;
@@ -64,7 +65,7 @@ export default function PortfolioSummaryCard() {
     // Divide by totalUSD so zero‑yield positions still contribute to the denominator
     const weightedYield = totalUSD > 0 ? weightedSum / totalUSD : 0;
     return { weightedYield, nominalYieldUSD: nominalSum };
-  }, [data, totalUSD]);
+  }, [positions, totalUSD]);
 
   // Determine conversion price based on selected currency
   let denomPrice: number | null = 1;
@@ -89,6 +90,8 @@ export default function PortfolioSummaryCard() {
     return val.toString();
   }
 
+  const isLoading = positionsLoading || pricesLoading;
+
   return (
     <Card>
       <CardHeader>
@@ -109,24 +112,35 @@ export default function PortfolioSummaryCard() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          <div className="flex justify-between items-baseline">
-            <span className="text-sm text-text-muted">Total Value</span>
-            <span className="text-base font-semibold">{formatValue(totalInSelected)}</span>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex justify-between items-baseline animate-pulse">
+                <div className="h-4 bg-white/10 rounded w-1/4" />
+                <div className="h-4 bg-white/10 rounded w-1/3" />
+              </div>
+            ))}
           </div>
-          <div className="flex justify-between items-baseline">
-            <span className="text-sm text-text-muted">Average APY</span>
-            <span className="text-sm font-semibold">{formatPct(weightedYield)}</span>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex justify-between items-baseline">
+              <span className="text-sm text-text-muted">Total Value</span>
+              <span className="text-base font-semibold">{formatValue(totalInSelected)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-sm text-text-muted">Average APY</span>
+              <span className="text-sm font-semibold">{formatPct(weightedYield)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-sm text-text-muted">Nominal Yield</span>
+              <span className="text-sm font-semibold">{formatValue(nominalInSelected)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-sm text-text-muted">Monthly Yield</span>
+              <span className="text-sm font-semibold">{formatValue(monthlyYieldInSelected)}</span>
+            </div>
           </div>
-          <div className="flex justify-between items-baseline">
-            <span className="text-sm text-text-muted">Nominal Yield</span>
-            <span className="text-sm font-semibold">{formatValue(nominalInSelected)}</span>
-          </div>
-          <div className="flex justify-between items-baseline">
-            <span className="text-sm text-text-muted">Monthly Yield</span>
-            <span className="text-sm font-semibold">{formatValue(monthlyYieldInSelected)}</span>
-          </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

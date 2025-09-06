@@ -1,7 +1,8 @@
 import type { FetchPositions, Position } from "./types";
 
 // Dashboard positions endpoint
-const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
+const PENDLE_POSITIONS_API =
+  "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
 
 // Base for market data (used to fetch APY metrics)
 const PENDLE_MARKET_DATA_BASE = "https://api-v2.pendle.finance/core/v2";
@@ -69,7 +70,9 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     return [];
   }
 
-  const positionsArr: AnyObj[] = Array.isArray(json?.positions) ? json.positions : [];
+  const positionsArr: AnyObj[] = Array.isArray(json?.positions)
+    ? json.positions
+    : [];
   if (positionsArr.length === 0) return [];
 
   const out: Position[] = [];
@@ -128,9 +131,12 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   async function loadMarketMeta(chainId: number) {
     if (activeMarketsFetched[chainId]) return;
     try {
-      const res = await fetch(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
-        headers: { accept: "application/json" },
-      });
+      const res = await fetch(
+        `https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`,
+        {
+          headers: { accept: "application/json" },
+        }
+      );
       if (res.ok) {
         const { markets } = await res.json();
         if (Array.isArray(markets)) {
@@ -168,11 +174,15 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     for (const op of opens) {
       const marketId: string = String(op?.marketId || "");
 
-      // Pre-fetch APY and market details
-      const marketData = await getMarketData(marketId);
-      const marketInfo = await getMarketDetails(marketId);
+      // Pre-fetch APY and market details concurrently
+      const [marketData, marketInfo] = await Promise.all([
+        getMarketData(marketId),
+        getMarketDetails(marketId),
+      ]);
       const protocolName: string | undefined =
-        typeof marketInfo?.protocol === "string" ? marketInfo.protocol : undefined;
+        typeof marketInfo?.protocol === "string"
+          ? marketInfo.protocol
+          : undefined;
 
       // For each leg type (pt, yt, lp)
       const legs: Array<["pt" | "yt" | "lp", AnyObj | undefined]> = [
@@ -195,8 +205,8 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
         let apr30d: number | undefined;
         let apy30d: number | undefined;
 
-        // Derive yields from marketData: use impliedApy for PT, ytFloatingApy for YT,
-        // aggregatedApy for LP.  Use one figure for all durations.
+        // Derive yields from marketData: use impliedApy for PT,
+        // ytFloatingApy for YT, aggregatedApy for LP.  Use one figure for all durations.
         if (marketData) {
           if (kind === "pt") {
             const implied = toNumber(marketData.impliedApy);
@@ -222,9 +232,10 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           }
         }
 
-        // Build a details URL pointing to the Pendle app.  Use the market address
-        // directly and append the chain ID as a query parameter.  This mirrors
-        // the structure used on pendle.finance (e.g. markets/<address>?chainId=1).
+        // Build a details URL pointing to the Pendle app.  Use the market
+        // address directly and append the chain ID as a query parameter.  This
+        // mirrors the structure used on pendle.finance (e.g.
+        // markets/<address>?chainId=1).
         let detailsUrl: string | undefined;
         const [chainIdStr, marketAddr] = marketId.split("-");
         if (chainIdStr && marketAddr) {

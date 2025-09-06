@@ -6,11 +6,6 @@ let multiPriceCache: {
 } | null = null;
 const PRICE_TTL = 1000 * 60 * 60 * 6; // 6 hours
 
-/**
- * Fetch USD prices for USDe, BTC, ETH and SOL from CoinGecko in a single call.
- * Uses the CoinGecko `/simple/price` endpoint with a comma‑separated list of IDs.
- * Results are cached for six hours to reduce network traffic.
- */
 export async function getPricesUSD(): Promise<{
   usde: number;
   btc: number;
@@ -44,10 +39,6 @@ export async function getPricesUSD(): Promise<{
   }
 }
 
-/**
- * Return the USD price of USDe (Ethena’s stablecoin).  Internally calls
- * {@link getPricesUSD} and extracts the USDe price from the returned map.
- */
 export async function getUSDePrice(): Promise<number> {
   const prices = await getPricesUSD();
   return prices.usde || 0;
