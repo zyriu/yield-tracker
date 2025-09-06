@@ -12,29 +12,31 @@ const BLOCKS_7D = 50_400n;
 const BLOCKS_30D = 216_000n;
 
 export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
-  const blockNumber = await publicClient.getBlockNumber();
-
-  // Batch the first two calls: sUSDe balance and decimals.
-  const [rawShares, rawDecimals] = (await multicall([
-    { address: SUSDE, abi: ETHENA_ABI, functionName: "balanceOf", args: [address as `0x${string}`], blockNumber },
-    { address: SUSDE, abi: ETHENA_ABI, functionName: "decimals", blockNumber },
-  ])) as [bigint, number];
-
-  // If no shares, return empty array
-  if (!rawShares || rawShares === 0n) {
-    return [];
-  }
-
-  const shares = rawShares as bigint;
-  const decimals = rawDecimals as number;
-
-  const past7 = blockNumber > BLOCKS_7D ? blockNumber - BLOCKS_7D : 0n;
-  const past30 = blockNumber > BLOCKS_30D ? blockNumber - BLOCKS_30D : 0n;
-
-  let apr7d: number | undefined;
-  let apy: number | undefined;
+  const out: Position[] = [];
 
   try {
+    const blockNumber = await publicClient.getBlockNumber();
+
+    // Batch the first two calls: sUSDe balance and decimals.
+    const [rawShares, rawDecimals] = (await multicall([
+      { address: SUSDE, abi: ETHENA_ABI, functionName: "balanceOf", args: [address as `0x${string}`], blockNumber },
+      { address: SUSDE, abi: ETHENA_ABI, functionName: "decimals", blockNumber },
+    ])) as [bigint, number];
+
+    // If no shares, return empty array
+    if (!rawShares || rawShares === 0n) {
+      return [];
+    }
+
+    const shares = rawShares as bigint;
+    const decimals = rawDecimals as number;
+
+    const past7 = blockNumber > BLOCKS_7D ? blockNumber - BLOCKS_7D : 0n;
+    const past30 = blockNumber > BLOCKS_30D ? blockNumber - BLOCKS_30D : 0n;
+
+    let apr7d: number | undefined;
+    let apy: number | undefined;
+
     const [assetsNow, oneShareAssetsNow, ppsPast7Raw, ppsPast30Raw] = (await multicall([
       { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [shares], blockNumber },
       { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n], blockNumber },
@@ -64,7 +66,7 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
     const assetsNowFloat = Number(formatUnits(assetsNow, decimals));
     const valueUSD = assetsNowFloat * pricesUSD.usde;
 
-    const pos: Position = {
+    out.push({
       protocol: "ethena",
       chain: "ethereum",
       address,
@@ -73,12 +75,10 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
       apy,
       valueUSD,
       detailsUrl: "https://app.ethena.fi/",
-    };
-
-    return [pos];
+    });
   } catch {
     /* empty */
   }
 
-  return [];
+  return out;
 };
