@@ -42,14 +42,7 @@ export default function PositionsTable() {
   const groupMode = useUIStore((s) => s.groupMode);
   const setGroupMode = useUIStore((s) => s.setGroupMode);
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isFetching,
-  } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["positions", addresses, rpc],
     queryFn: () => fetchAll(addresses),
     enabled: addresses.length > 0,
@@ -115,18 +108,16 @@ export default function PositionsTable() {
   // Column widths: owner/protocol, asset, source, chain, APY, value, current yield
   const Cols = () => (
     <colgroup>
-      <col style={{ width: "12%" }} />
+      <col style={{ width: "10%" }} />
       <col style={{ width: "20%" }} />
-      <col style={{ width: "12%" }} />
       <col style={{ width: "10%" }} />
-      <col style={{ width: "18%" }} />
-      <col style={{ width: "18%" }} />
-      <col style={{ width: "10%" }} />
+      <col style={{ width: "6%" }} />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "24%" }} />
     </colgroup>
   );
-
-  // Choose an APY value in order of preference
-  const getApy = (p: any) => p.apy30d ?? p.apr30d ?? p.apr7d;
 
   return (
     <Card>
@@ -137,9 +128,7 @@ export default function PositionsTable() {
             <span className="text-xs text-text-muted">Group by</span>
             <Select
               value={groupMode}
-              onChange={(e) =>
-                setGroupMode((e.target.value as "protocol" | "wallet") ?? "protocol")
-              }
+              onChange={(e) => setGroupMode((e.target.value as "protocol" | "wallet") ?? "protocol")}
               className="min-w-[140px]"
             >
               <option value="protocol">Protocol</option>
@@ -153,9 +142,7 @@ export default function PositionsTable() {
       </CardHeader>
       <CardContent>
         {isLoading && <LoadingSkeleton />}
-        {isError && (
-          <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>
-        )}
+        {isError && <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>}
         {!isLoading && !isError && (!data || data.length === 0) && (
           <EmptyState title="No positions found" hint="Add an address to start tracking." />
         )}
@@ -187,6 +174,7 @@ export default function PositionsTable() {
                         )}
                         <th className="py-2 px-3 text-center">Source</th>
                         <th className="py-2 px-3 text-center">Chain</th>
+                        <th className="py-2 px-3 text-center">APR (7d)</th>
                         <th className="py-2 px-3 text-center">APY</th>
                         <th className="py-2 px-3 text-center">Value</th>
                         <th className="py-2 px-3 text-right">Current yield</th>
@@ -214,42 +202,41 @@ export default function PositionsTable() {
                             </td>
                           )}
                           <td className="py-2 px-3 text-center truncate">{p.asset}</td>
-                          <td className="py-2 px-3 text-center">
-                            {p.marketProtocol ?? "-"}
-                          </td>
+                          <td className="py-2 px-3 text-center">{p.marketProtocol ?? "-"}</td>
                           <td className="py-2 px-3 text-center capitalize">
                             {chainIcons[p.chain] ? (
                               <div className="inline-flex items-center justify-center w-6 h-6 bg-white/10 rounded-full">
-                                <img
-                                  src={chainIcons[p.chain]}
-                                  alt={p.chain}
-                                  className="w-4 h-4"
-                                />
+                                <img src={chainIcons[p.chain]} alt={p.chain} className="w-4 h-4" />
                               </div>
                             ) : (
                               p.chain
                             )}
                           </td>
+                          {/* 7‑day APR */}
                           <td className="py-2 px-3 text-center">
                             {(() => {
-                              const apy = getApy(p);
-                              if (apy === undefined) return "-";
-                              const isYT = p.asset.startsWith("YT-");
+                              const apr = p.apr7d;
+                              if (apr === undefined) return "-";
+                              // Apply color to negative yields (e.g. YT tokens)
+                              const isNeg = apr < 0;
                               const colorClass =
-                                isYT && apy <= -0.99
-                                  ? "text-red-500"
-                                  : isYT && apy < 0
-                                  ? "text-orange-500"
-                                  : "";
+                                isNeg && apr <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
+                              return <span className={colorClass}>{formatPct(apr)}</span>;
+                            })()}
+                          </td>
+                          {/* APY */}
+                          <td className="py-2 px-3 text-center">
+                            {(() => {
+                              const apy = p.apy;
+                              if (apy === undefined) return "-";
+                              const isNeg = apy < 0;
+                              const colorClass =
+                                isNeg && apy <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
                               return <span className={colorClass}>{formatPct(apy)}</span>;
                             })()}
                           </td>
-                          <td className="py-2 px-3 text-center tabular-nums">
-                            {formatUSD(p.valueUSD)}
-                          </td>
-                            <td className="py-2 px-3 text-right">
-                            {p.claimableRewards ?? "-"}
-                          </td>
+                          <td className="py-2 px-3 text-center tabular-nums">{formatUSD(p.valueUSD)}</td>
+                          <td className="py-2 px-3 text-right">{p.claimableRewards ?? "-"}</td>
                         </tr>
                       ))}
                     </tbody>

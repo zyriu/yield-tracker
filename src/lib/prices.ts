@@ -38,8 +38,3 @@ export async function getPricesUSD(): Promise<{
     return { usde: 0, btc: 0, eth: 0, sol: 0 };
   }
 }
-
-export async function getUSDePrice(): Promise<number> {
-  const prices = await getPricesUSD();
-  return prices.usde || 0;
-}

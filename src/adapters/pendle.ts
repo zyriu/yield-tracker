@@ -1,8 +1,7 @@
 import type { FetchPositions, Position } from "./types";
 
 // Dashboard positions endpoint
-const PENDLE_POSITIONS_API =
-  "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
+const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
 
 // Base for market data (used to fetch APY metrics)
 const PENDLE_MARKET_DATA_BASE = "https://api-v2.pendle.finance/core/v2";
@@ -59,6 +58,11 @@ function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
   return `${kind.toUpperCase()}-${core.slice(0, 6)}`;
 }
 
+/**
+ * Pendle adapter: fetches open positions on Pendle and maps yield data to APR (7d) and APY.
+ * Since Pendle’s API returns a single APY figure (implied/aggregated), we treat that
+ * value as both the 7‑day APR and the APY.
+ */
 export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   const url = `${PENDLE_POSITIONS_API}/${address.toLowerCase()}`;
   let json: AnyObj;
@@ -70,9 +74,7 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     return [];
   }
 
-  const positionsArr: AnyObj[] = Array.isArray(json?.positions)
-    ? json.positions
-    : [];
+  const positionsArr: AnyObj[] = Array.isArray(json?.positions) ? json.positions : [];
   if (positionsArr.length === 0) return [];
 
   const out: Position[] = [];
@@ -131,12 +133,9 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   async function loadMarketMeta(chainId: number) {
     if (activeMarketsFetched[chainId]) return;
     try {
-      const res = await fetch(
-        `https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`,
-        {
-          headers: { accept: "application/json" },
-        }
-      );
+      const res = await fetch(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
+        headers: { accept: "application/json" },
+      });
       if (res.ok) {
         const { markets } = await res.json();
         if (Array.isArray(markets)) {
@@ -159,8 +158,7 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
 
   for (const chainBucket of positionsArr) {
     const chainId = toNumber(chainBucket?.chainId);
-    const chain: Position["chain"] | "skip" =
-      chainId && CHAIN_MAP[chainId] ? CHAIN_MAP[chainId] : "skip";
+    const chain: Position["chain"] | "skip" = chainId && CHAIN_MAP[chainId] ? CHAIN_MAP[chainId] : "skip";
     if (chain === "skip") continue;
 
     // Preload market metadata for this chain
@@ -168,21 +166,14 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
       await loadMarketMeta(chainId);
     }
 
-    const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions)
-      ? chainBucket.openPositions
-      : [];
+    const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
     for (const op of opens) {
       const marketId: string = String(op?.marketId || "");
 
       // Pre-fetch APY and market details concurrently
-      const [marketData, marketInfo] = await Promise.all([
-        getMarketData(marketId),
-        getMarketDetails(marketId),
-      ]);
+      const [marketData, marketInfo] = await Promise.all([getMarketData(marketId), getMarketDetails(marketId)]);
       const protocolName: string | undefined =
-        typeof marketInfo?.protocol === "string"
-          ? marketInfo.protocol
-          : undefined;
+        typeof marketInfo?.protocol === "string" ? marketInfo.protocol : undefined;
 
       // For each leg type (pt, yt, lp)
       const legs: Array<["pt" | "yt" | "lp", AnyObj | undefined]> = [
@@ -202,32 +193,28 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
         const asset = assetLabel(kind, marketId);
 
         let apr7d: number | undefined;
-        let apr30d: number | undefined;
-        let apy30d: number | undefined;
+        let apy: number | undefined;
 
         // Derive yields from marketData: use impliedApy for PT,
-        // ytFloatingApy for YT, aggregatedApy for LP.  Use one figure for all durations.
+        // ytFloatingApy for YT, aggregatedApy for LP.
         if (marketData) {
           if (kind === "pt") {
             const implied = toNumber(marketData.impliedApy);
             if (implied !== undefined) {
               apr7d = implied;
-              apr30d = implied;
-              apy30d = implied;
+              apy = implied;
             }
           } else if (kind === "yt") {
             const ytFloat = toNumber(marketData.ytFloatingApy);
             if (ytFloat !== undefined) {
               apr7d = ytFloat;
-              apr30d = ytFloat;
-              apy30d = ytFloat;
+              apy = ytFloat;
             }
           } else if (kind === "lp") {
             const agg = toNumber(marketData.aggregatedApy);
             if (agg !== undefined) {
               apr7d = agg;
-              apr30d = agg;
-              apy30d = agg;
+              apy = agg;
             }
           }
         }
@@ -249,8 +236,7 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           asset,
           marketProtocol: protocolName,
           apr7d,
-          apr30d,
-          apy30d,
+          apy,
           valueUSD: valuation > 0 ? valuation : 0,
           detailsUrl,
         });

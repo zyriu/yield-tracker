@@ -7,6 +7,7 @@ export interface MulticallItem {
   abi: Abi;
   functionName: string;
   args?: readonly unknown[];
+  blockNumber: bigint;
 }
 
 export async function multicall<T extends MulticallItem>(calls: readonly T[]): Promise<unknown[]> {
@@ -17,6 +18,7 @@ export async function multicall<T extends MulticallItem>(calls: readonly T[]): P
         abi: call.abi,
         functionName: call.functionName as any,
         args: call.args ?? [],
+        blockNumber: call.blockNumber,
       })),
       allowFailure: true,
     });
