@@ -12,5 +12,7 @@ export interface Position {
   valueUSD: number;
   detailsUrl?: string;
   claimableRewards?: string;
+  claimableRewardsValueUSD?: number;
 }
+
 export type FetchPositions = (args: { address: string }) => Promise<Position[]>;

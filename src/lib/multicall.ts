@@ -1,6 +1,6 @@
-import { publicClient } from "./viem";
+import type { Abi, Address, PublicClient } from "viem";
 
-import type { Abi, Address } from "viem";
+import { pushToast } from "@/components/ui/toast";
 
 export interface MulticallItem {
   address: Address;
@@ -10,9 +10,12 @@ export interface MulticallItem {
   blockNumber: bigint;
 }
 
-export async function multicall<T extends MulticallItem>(calls: readonly T[]): Promise<unknown[]> {
+export async function multicall<T extends MulticallItem>(
+  client: PublicClient,
+  calls: readonly T[]
+): Promise<unknown[]> {
   try {
-    const response = await publicClient.multicall({
+    const response = await client.multicall({
       contracts: calls.map((call) => ({
         address: call.address,
         abi: call.abi,
@@ -24,9 +27,10 @@ export async function multicall<T extends MulticallItem>(calls: readonly T[]): P
     });
     return response.map((res) => (res.status === "success" ? res.result : null));
   } catch (err) {
+    pushToast(`multicall failed: ${err}`);
+
     // In case the entire multicall fails, return an array of nulls matching
     // the number of calls.  This preserves ordering and length for callers.
-    console.error("multicall failed", err);
     return new Array(calls.length).fill(null);
   }
 }

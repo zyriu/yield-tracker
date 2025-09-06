@@ -14,11 +14,13 @@ export const adapters: Record<Protocol, FetchPositions> = {
 
 export async function fetchPositionsForAddress(address: string, protocols: string[]) {
   const results: Promise<any[]>[] = [];
+
   for (const protocol of protocols) {
     const fn = adapters[protocol as Protocol];
     if (fn) {
       results.push(fn({ address }));
     }
   }
+
   return (await Promise.all(results)).flat();
 }

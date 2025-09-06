@@ -10,11 +10,13 @@ export default function SettingsDrawer() {
   const open = useUIStore((s) => s.settingsOpen);
   const close = useUIStore((s) => s.closeSettings);
 
-  const rpcUrl = useSessionStore((s) => s.rpcUrl);
-  const setRPC = useSessionStore((s) => s.setRPC);
-  const wc = useSessionStore((s) => s.wcProjectId);
-  const setWC = useSessionStore((s) => s.setWC);
-  const [rpcErr, setRpcErr] = useState<string | null>(null);
+  const mainnetRpcUrl = useSessionStore((s) => s.mainnetRpcUrl);
+  const setMainnetRPC = useSessionStore((s) => s.setMainnetRPC);
+  const [mainnetRpcErr, setMainnetRpcErr] = useState<string | null>(null);
+
+  const arbitrumRpcUrl = useSessionStore((s) => s.arbitrumRpcUrl);
+  const setArbitrumRPC = useSessionStore((s) => s.setArbitrumRPC);
+  const [arbitrumRpcErr, setArbitrumRpcErr] = useState<string | null>(null);
 
   const validateRpc = (v: string) => {
     if (!v) return null;
@@ -28,6 +30,7 @@ export default function SettingsDrawer() {
   };
 
   if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="ml-auto h-full w-80 bg-bg border-l border-white/10 p-4">
@@ -42,27 +45,31 @@ export default function SettingsDrawer() {
             <Label htmlFor="rpc">Ethereum RPC URL</Label>
             <Input
               id="rpc"
-              placeholder="https://mainnet.infura.io/v3/…"
-              value={rpcUrl}
+              placeholder="https://eth.llamarpc.com"
+              value={mainnetRpcUrl}
               onChange={(e) => {
                 const v = e.target.value;
-                setRPC(v);
-                setRpcErr(validateRpc(v));
+                setMainnetRPC(v);
+                setMainnetRpcErr(validateRpc(v));
               }}
             />
-            <p className="mt-1 text-xs text-text-muted">
-              Used for reads—stored locally in your browser.
-            </p>
-            {rpcErr && <p className="mt-1 text-xs text-red-400">{rpcErr}</p>}
+            <p className="mt-1 text-xs text-text-muted">Used for reads—stored locally in your browser.</p>
+            {mainnetRpcErr && <p className="mt-1 text-xs text-red-400">{mainnetRpcErr}</p>}
           </div>
           <div>
-            <Label htmlFor="wc">WalletConnect Project ID (optional)</Label>
+            <Label htmlFor="rpc">Arbitrum RPC URL</Label>
             <Input
-              id="wc"
-              placeholder="xxxx…"
-              value={wc || ""}
-              onChange={(e) => setWC(e.target.value || undefined)}
+              id="rpc"
+              placeholder="https://arbitrum-one.public.blastapi.io"
+              value={arbitrumRpcUrl}
+              onChange={(e) => {
+                const v = e.target.value;
+                setArbitrumRPC(v);
+                setArbitrumRpcErr(validateRpc(v));
+              }}
             />
+            <p className="mt-1 text-xs text-text-muted">Used for reads—stored locally in your browser.</p>
+            {arbitrumRpcErr && <p className="mt-1 text-xs text-red-400">{arbitrumRpcErr}</p>}
           </div>
         </div>
       </div>

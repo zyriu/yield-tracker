@@ -8,11 +8,13 @@ type UIState = {
   settingsOpen: boolean;
   theme: "dark" | "light";
   groupMode: GroupMode;
+  excludedPositions: string[];
   toggleSidebar: () => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleTheme: () => void;
   setGroupMode: (m: GroupMode) => void;
+  togglePositionExcluded: (id: string) => void;
 };
 
 export const useUIStore = create<UIState>()(
@@ -22,6 +24,7 @@ export const useUIStore = create<UIState>()(
       settingsOpen: false,
       theme: "dark",
       groupMode: "protocol",
+      excludedPositions: [],
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       openSettings: () => set({ settingsOpen: true }),
       closeSettings: () => set({ settingsOpen: false }),
@@ -30,7 +33,13 @@ export const useUIStore = create<UIState>()(
         document.documentElement.classList.toggle("dark", next === "dark");
         set({ theme: next });
       },
-      setGroupMode: (m) => set({ groupMode: m })
+      setGroupMode: (m) => set({ groupMode: m }),
+      togglePositionExcluded: (id: string) => {
+        const current = get().excludedPositions;
+        const exists = current.includes(id);
+        const next = exists ? current.filter((x) => x !== id) : [...current, id];
+        set({ excludedPositions: next });
+      },
     }),
     { name: "ui" }
   )

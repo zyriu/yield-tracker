@@ -4,7 +4,7 @@ import type { FetchPositions, Position } from "./types";
 
 import { multicall } from "@/lib/multicall";
 import { getPricesUSD } from "@/lib/prices";
-import { publicClient } from "@/lib/viem";
+import { mainnetClient } from "@/lib/viem";
 import { ETHENA_ABI, SUSDE } from "@/lib/web3";
 
 // ≈12s blocks
@@ -15,21 +15,18 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
   const out: Position[] = [];
 
   try {
-    const blockNumber = await publicClient.getBlockNumber();
+    const blockNumber = await mainnetClient.getBlockNumber();
 
     // Batch the first two calls: sUSDe balance and decimals.
-    const [rawShares, rawDecimals] = (await multicall([
+    const [shares, decimals] = (await multicall(mainnetClient, [
       { address: SUSDE, abi: ETHENA_ABI, functionName: "balanceOf", args: [address as `0x${string}`], blockNumber },
       { address: SUSDE, abi: ETHENA_ABI, functionName: "decimals", blockNumber },
     ])) as [bigint, number];
 
     // If no shares, return empty array
-    if (!rawShares || rawShares === 0n) {
-      return [];
+    if (!shares || shares === 0n) {
+      return out;
     }
-
-    const shares = rawShares as bigint;
-    const decimals = rawDecimals as number;
 
     const past7 = blockNumber > BLOCKS_7D ? blockNumber - BLOCKS_7D : 0n;
     const past30 = blockNumber > BLOCKS_30D ? blockNumber - BLOCKS_30D : 0n;
@@ -37,7 +34,7 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
     let apr7d: number | undefined;
     let apy: number | undefined;
 
-    const [assetsNow, oneShareAssetsNow, ppsPast7Raw, ppsPast30Raw] = (await multicall([
+    const [assetsNow, oneShareAssetsNow, ppsPast7Raw, ppsPast30Raw] = (await multicall(mainnetClient, [
       { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [shares], blockNumber },
       { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n], blockNumber },
       { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n], blockNumber: past7 },
@@ -62,9 +59,9 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
       apy = Math.pow(1 + r7, 365 / 7) - 1;
     }
 
-    const pricesUSD = await getPricesUSD();
+    const { pricesUSD } = getPricesUSD();
     const assetsNowFloat = Number(formatUnits(assetsNow, decimals));
-    const valueUSD = assetsNowFloat * pricesUSD.usde;
+    const valueUSD = assetsNowFloat * pricesUSD!.usde;
 
     out.push({
       protocol: "ethena",

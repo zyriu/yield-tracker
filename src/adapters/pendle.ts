@@ -1,12 +1,12 @@
+import axios from "axios";
+import { formatUnits } from "viem";
+
 import type { FetchPositions, Position } from "./types";
 
-// Dashboard positions endpoint
+import { pushToast } from "@/components/ui/toast";
+
 const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
-
-// Base for market data (used to fetch APY metrics)
 const PENDLE_MARKET_DATA_BASE = "https://api-v2.pendle.finance/core/v2";
-
-// Base for market details (returns protocol and other info)
 const PENDLE_MARKET_DETAILS_BASE = "https://api-v2.pendle.finance/core/v1";
 
 type AnyObj = Record<string, any>;
@@ -30,7 +30,9 @@ function toBigIntOrZero(x: any): bigint {
     if (typeof x === "bigint") return x;
     if (typeof x === "number") return BigInt(Math.trunc(x));
     if (typeof x === "string" && x.length > 0) return BigInt(x);
-  } catch {}
+  } catch {
+    /* empty */
+  }
   return 0n;
 }
 
@@ -38,9 +40,7 @@ function toBigIntOrZero(x: any): bigint {
 const marketMetaCache: Record<string, { name: string; expiry: string }> = {};
 const activeMarketsFetched: Record<number, boolean> = {};
 
-// Produce a human‑readable asset label.  If metadata exists in
-// marketMetaCache, include the market name and expiry date; otherwise fall
-// back to a truncated address.
+// Produce a human‑readable asset label.  If metadata exists in marketMetaCache, include the market name and expiry date; otherwise fall back to a truncated address.
 function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
   const [chainIdStr, marketAddr] = marketId.split("-");
   const key = `${chainIdStr}-${marketAddr}`;
@@ -50,7 +50,6 @@ function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
     const dateStr = date.toLocaleDateString("en-US", {
       day: "numeric",
       month: "short",
-      year: "numeric",
     });
     return `${kind.toUpperCase()}-${meta.name} (${dateStr})`;
   }
@@ -58,18 +57,13 @@ function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
   return `${kind.toUpperCase()}-${core.slice(0, 6)}`;
 }
 
-/**
- * Pendle adapter: fetches open positions on Pendle and maps yield data to APR (7d) and APY.
- * Since Pendle’s API returns a single APY figure (implied/aggregated), we treat that
- * value as both the 7‑day APR and the APY.
- */
 export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   const url = `${PENDLE_POSITIONS_API}/${address.toLowerCase()}`;
   let json: AnyObj;
   try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) return [];
-    json = (await res.json()) as AnyObj;
+    const { data, status } = await axios.get(url, { headers: { accept: "application/json" } });
+    if (status !== 200) return [];
+    json = data;
   } catch {
     return [];
   }
@@ -93,14 +87,11 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     }
     const api = `${PENDLE_MARKET_DATA_BASE}/${chainIdStr}/markets/${marketAddr}/data`;
     try {
-      const res = await fetch(api, { headers: { accept: "application/json" } });
-      if (res.ok) {
-        const data = await res.json();
-        marketDataCache[marketId] = data;
-        return data;
-      }
-    } catch {
-      // network error
+      const { data } = await axios.get(api, { headers: { accept: "application/json" } });
+      marketDataCache[marketId] = data;
+      return data;
+    } catch (err) {
+      pushToast(`error fetching pendle market: ${err}`);
     }
     marketDataCache[marketId] = undefined;
     return undefined;
@@ -116,12 +107,9 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     }
     const api = `${PENDLE_MARKET_DETAILS_BASE}/${chainIdStr}/markets/${marketAddr}`;
     try {
-      const res = await fetch(api, { headers: { accept: "application/json" } });
-      if (res.ok) {
-        const data = await res.json();
-        marketDetailsCache[marketId] = data;
-        return data;
-      }
+      const { data } = await axios.get(api, { headers: { accept: "application/json" } });
+      marketDetailsCache[marketId] = data;
+      return data;
     } catch {
       // ignore errors
     }
@@ -133,25 +121,22 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   async function loadMarketMeta(chainId: number) {
     if (activeMarketsFetched[chainId]) return;
     try {
-      const res = await fetch(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
+      const { data } = await axios.get(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
         headers: { accept: "application/json" },
       });
-      if (res.ok) {
-        const { markets } = await res.json();
-        if (Array.isArray(markets)) {
-          for (const m of markets) {
-            if (m?.address && m?.name && m?.expiry) {
-              const key = `${chainId}-${m.address}`;
-              marketMetaCache[key] = {
-                name: m.name,
-                expiry: m.expiry,
-              };
-            }
+      if (Array.isArray(data)) {
+        for (const m of data) {
+          if (m?.address && m?.name && m?.expiry) {
+            const key = `${chainId}-${m.address}`;
+            marketMetaCache[key] = {
+              name: m.name,
+              expiry: m.expiry,
+            };
           }
         }
       }
     } catch {
-      // ignore
+      /* empty */
     }
     activeMarketsFetched[chainId] = true;
   }
@@ -187,7 +172,7 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
 
         const valuation = toNumber(leg.valuation) ?? 0;
         const balanceBI = toBigIntOrZero(leg.balance);
-        const activeBI = toBigIntOrZero(leg.activeBalance);
+        const activeBI = toBigIntOrZero((leg as any).activeBalance);
         if (valuation <= 0 && balanceBI === 0n && activeBI === 0n) continue;
 
         const asset = assetLabel(kind, marketId);
@@ -219,14 +204,52 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           }
         }
 
-        // Build a details URL pointing to the Pendle app.  Use the market
-        // address directly and append the chain ID as a query parameter.  This
-        // mirrors the structure used on pendle.finance (e.g.
-        // markets/<address>?chainId=1).
+        // Build a details URL pointing to the Pendle app.  Use the market address directly and append the chain ID as a query parameter.  This mirrors the structure used on pendle.finance (e.g. markets/<address>?chainId=1).
         let detailsUrl: string | undefined;
         const [chainIdStr, marketAddr] = marketId.split("-");
         if (chainIdStr && marketAddr) {
           detailsUrl = `https://app.pendle.finance/markets/${marketAddr}?chainId=${chainIdStr}`;
+        }
+
+        // Determine amount and symbols for display.  Try to infer the underlying token symbol from the asset label.
+        let claimableRewards: string | undefined;
+        let claimableRewardsValueUSD: number | undefined;
+
+        // Handle claimable tokens if provided in API (claimTokenAmounts array)
+        const cta: any[] | undefined = Array.isArray((leg as any).claimTokenAmounts)
+          ? (leg as any).claimTokenAmounts
+          : undefined;
+        if (cta && cta.length > 0) {
+          const parts: string[] = [];
+          let totalUSD = 0;
+          for (const ct of cta) {
+            if (!ct) continue;
+            // Determine amount with decimals
+            const dec = typeof ct.decimals === "number" ? ct.decimals : 18;
+            let amtFloat = 0;
+            try {
+              if (typeof ct.amount === "string" || typeof ct.amount === "number") {
+                const bi = BigInt(ct.amount);
+                amtFloat = Number(formatUnits(bi, dec));
+              }
+            } catch {
+              const n = Number(ct.amount);
+              if (!isNaN(n)) {
+                amtFloat = n / 10 ** dec;
+              }
+            }
+            const sym = ct.symbol ?? ct.tokenSymbol ?? "";
+            if (amtFloat > 0) {
+              parts.push(`${amtFloat.toFixed(2)} ${sym}`);
+              if (typeof ct.price === "number") {
+                totalUSD += amtFloat * ct.price;
+              }
+            }
+          }
+          if (parts.length > 0) {
+            claimableRewards = parts.join(", ");
+            claimableRewardsValueUSD = totalUSD > 0 ? totalUSD : undefined;
+          }
         }
 
         out.push({
@@ -239,6 +262,8 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           apy,
           valueUSD: valuation > 0 ? valuation : 0,
           detailsUrl,
+          claimableRewards,
+          claimableRewardsValueUSD,
         });
       }
     }

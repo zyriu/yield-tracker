@@ -10,13 +10,14 @@ type TrackedAddress = {
 
 type SessionState = {
   addresses: TrackedAddress[];
-  rpcUrl: string;
-  wcProjectId?: string;
   addAddress: (address: string, label?: string) => void;
   removeAddress: (id: string) => void;
   setAddressLabel: (id: string, label?: string) => void;
-  setRPC: (url: string) => void;
-  setWC: (id?: string) => void;
+
+  mainnetRpcUrl: string;
+  setMainnetRPC: (url: string) => void;
+  arbitrumRpcUrl: string;
+  setArbitrumRPC: (url: string) => void;
 };
 
 function idFor(addr: string) {
@@ -27,8 +28,6 @@ export const useSessionStore = create<SessionState>()(
   persist(
     (set, get) => ({
       addresses: [],
-      rpcUrl: "",
-      wcProjectId: undefined,
       addAddress: (address, label) => {
         if (!isAddress(address as `0x${string}`)) {
           throw new Error("Invalid EVM address");
@@ -45,13 +44,14 @@ export const useSessionStore = create<SessionState>()(
       },
       setAddressLabel: (id, label) => {
         set((s) => ({
-          addresses: s.addresses.map((a) =>
-            a.id === id ? { ...a, label: label || undefined } : a
-          ),
+          addresses: s.addresses.map((a) => (a.id === id ? { ...a, label: label || undefined } : a)),
         }));
       },
-      setRPC: (url) => set({ rpcUrl: url }),
-      setWC: (id) => set({ wcProjectId: id || undefined }),
+
+      mainnetRpcUrl: "",
+      setMainnetRPC: (url) => set({ mainnetRpcUrl: url }),
+      arbitrumRpcUrl: "",
+      setArbitrumRPC: (url) => set({ arbitrumRpcUrl: url }),
     }),
     { name: "session" }
   )

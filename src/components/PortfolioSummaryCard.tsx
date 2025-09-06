@@ -7,6 +7,7 @@ import { Select } from "./ui/select";
 import { adapters, fetchPositionsForAddress } from "@/adapters";
 import { getPricesUSD } from "@/lib/prices";
 import { useSessionStore } from "@/store/useSessionStore";
+import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD } from "@/utils/format";
 
 const fetchAllPositions = async (addresses: string[]) => {
@@ -18,45 +19,50 @@ const fetchAllPositions = async (addresses: string[]) => {
 export default function PortfolioSummaryCard() {
   // Gather all tracked addresses and RPC URL
   const addresses = useSessionStore((s) => s.addresses.map((a) => a.address));
-  const rpc = useSessionStore((s) => s.rpcUrl);
 
   // Query all positions for the tracked addresses
   const { data: positions, isLoading: positionsLoading } = useQuery({
-    queryKey: ["portfolio-summary", addresses, rpc],
+    queryKey: ["portfolio-summary", addresses],
     queryFn: () => fetchAllPositions(addresses),
     enabled: addresses.length > 0,
-    staleTime: 60_000, // cache positions for 1 minute
-    cacheTime: 120_000,
+    refetchInterval: 1000 * 60 * 5,
+    staleTime: 1_000 * 60 * 5,
   });
 
-  // Fetch USDe, BTC, ETH and SOL prices from CoinGecko using a single call.
-  // This hook returns a price map keyed by asset symbol. If the fetch fails
-  // or is still loading, the values will be undefined.
-  const { data: priceData, isLoading: pricesLoading } = useQuery({
-    queryKey: ["coingecko-prices"],
-    queryFn: getPricesUSD,
-    staleTime: 1000 * 60 * 60 * 6, // 6 hours
-    cacheTime: 1000 * 60 * 60 * 6,
-  });
+  const { pricesUSD, isLoading: pricesLoading } = getPricesUSD();
 
   // State for selected denomination (usd, btc, eth or sol)
   const [currency, setCurrency] = useState<"usd" | "btc" | "eth" | "sol">("usd");
 
+  // Excluded positions list
+  const excludedPositions = useUIStore((s) => s.excludedPositions);
+
+  // Helper to build a stable ID for a position
+  const generateId = (p: any): string =>
+    [p.protocol, p.chain, p.address?.toLowerCase?.(), p.asset, p.marketProtocol ?? ""].join(":");
+
+  // Filter positions to only those included in summary
+  const relevantPositions = useMemo(() => {
+    if (!positions) return [];
+    if (!excludedPositions || excludedPositions.length === 0) return positions;
+    return positions.filter((p) => !excludedPositions.includes(generateId(p)));
+  }, [positions, excludedPositions]);
+
   // Sum the USD value of all positions
   const totalUSD = useMemo(() => {
-    if (!positions) return 0;
-    return positions.reduce((acc, p) => acc + (p.valueUSD || 0), 0);
-  }, [positions]);
+    if (!relevantPositions) return 0;
+    return relevantPositions.reduce((acc, p) => acc + (p.valueUSD || 0), 0);
+  }, [relevantPositions]);
 
   // Calculate weighted average yield and nominal yield (in USD)
   const { weightedYield, nominalYieldUSD } = useMemo(() => {
-    if (!positions || positions.length === 0) return { weightedYield: 0, nominalYieldUSD: 0 };
+    if (!relevantPositions || relevantPositions.length === 0) return { weightedYield: 0, nominalYieldUSD: 0 };
     let weightedSum = 0;
     let nominalSum = 0;
-    positions.forEach((p) => {
+    relevantPositions.forEach((p) => {
       const val = p.valueUSD || 0;
       // Determine the position's APR/APY (prefer 30d APY, then 30d APR, then 7d APR)
-      let apy = p.apy30d ?? p.apr30d ?? p.apr7d ?? 0;
+      let apy: number = (p as any).apy30d ?? (p as any).apr30d ?? p.apr7d ?? 0;
       // Treat negative yields (e.g. YT tokens) as zero
       if (apy < 0) apy = 0;
       weightedSum += val * apy;
@@ -65,13 +71,13 @@ export default function PortfolioSummaryCard() {
     // Divide by totalUSD so zero‑yield positions still contribute to the denominator
     const weightedYield = totalUSD > 0 ? weightedSum / totalUSD : 0;
     return { weightedYield, nominalYieldUSD: nominalSum };
-  }, [positions, totalUSD]);
+  }, [relevantPositions, totalUSD]);
 
   // Determine conversion price based on selected currency
   let denomPrice: number | null = 1;
-  if (currency === "btc") denomPrice = priceData?.btc ?? null;
-  if (currency === "eth") denomPrice = priceData?.eth ?? null;
-  if (currency === "sol") denomPrice = priceData?.sol ?? null;
+  if (currency === "btc") denomPrice = pricesUSD?.btc ?? null;
+  if (currency === "eth") denomPrice = pricesUSD?.eth ?? null;
+  if (currency === "sol") denomPrice = pricesUSD?.sol ?? null;
 
   // Convert total and nominal yields into the selected currency
   const totalInSelected = denomPrice && denomPrice > 0 ? totalUSD / denomPrice : null;
@@ -99,10 +105,7 @@ export default function PortfolioSummaryCard() {
           <CardTitle>Portfolio Summary</CardTitle>
           <div className="flex items-center gap-3 flex-nowrap whitespace-nowrap">
             <span className="text-xs text-text-muted">Denominator</span>
-            <Select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value as "usd" | "btc" | "eth" | "sol")}
-            >
+            <Select value={currency} onChange={(e) => setCurrency(e.target.value as "usd" | "btc" | "eth" | "sol")}>
               <option value="usd">USD</option>
               <option value="btc">BTC</option>
               <option value="eth">ETH</option>

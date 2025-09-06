@@ -1,54 +1,45 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { useMemo } from "react";
 
 import EmptyState from "./EmptyState";
-import LoadingSkeleton from "./LoadingSkeleton";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
+import { getIcons } from "@/lib/icons";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD, shortAddress } from "@/utils/format";
 
-// Helper to fetch positions across multiple protocols for all addresses
-const fetchAll = async (addresses: string[]) => {
-  const protocols = Object.keys(adapters);
-  const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols)));
-  return res.flat();
-};
-
-// Map each chain to its corresponding CoinGecko ID for icon fetching
-const chainToCoingeckoId: Record<string, string> = {
-  ethereum: "ethereum",
-  arbitrum: "arbitrum",
-  hyperliquid: "hyperliquid",
-};
-
-// Dashboard URLs for protocol names
-const protocolLinks: Record<string, string> = {
-  pendle: "https://app.pendle.finance",
-  ethena: "https://app.ethena.fi",
-  spark: "https://app.spark.fi",
-  sky: "https://app.sky.money",
-};
-
 export default function PositionsTable() {
   const addressItems = useSessionStore((s) => s.addresses);
   const addresses = addressItems.map((a) => a.address);
-  const rpc = useSessionStore((s) => s.rpcUrl);
 
   const groupMode = useUIStore((s) => s.groupMode);
   const setGroupMode = useUIStore((s) => s.setGroupMode);
 
+  // Excluded positions for portfolio summary
+  const excludedPositions = useUIStore((s) => s.excludedPositions);
+  const togglePositionExcluded = useUIStore((s) => s.togglePositionExcluded);
+
+  // Helper to build a stable ID for each position
+  const generateId = (p: any): string =>
+    [p.protocol, p.chain, p.address?.toLowerCase?.(), p.asset, p.marketProtocol ?? ""].join(":");
+
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["positions", addresses, rpc],
-    queryFn: () => fetchAll(addresses),
+    queryKey: ["positions", addresses],
+    queryFn: async () => {
+      const protocols = Object.keys(adapters);
+      const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols)));
+      return res.flat();
+    },
     enabled: addresses.length > 0,
-    staleTime: 60_000, // cache positions for 1 minute
-    cacheTime: 120_000,
+    staleTime: 60_000,
   });
+
+  const icons = getIcons();
 
   const labelFor = useMemo(
     () => Object.fromEntries(addressItems.map((a) => [a.address.toLowerCase(), a.label] as const)),
@@ -59,13 +50,17 @@ export default function PositionsTable() {
   // Group positions either by protocol or by wallet address
   const grouped = useMemo(() => {
     if (!data) return [];
+
     if (groupMode === "protocol") {
       const groups: Record<string, { title: string; total: number; rows: typeof data }> = {};
       for (const p of data) {
         const key = p.protocol;
         if (!groups[key]) groups[key] = { title: p.protocol, total: 0, rows: [] as any };
         groups[key].rows.push(p);
-        groups[key].total += p.valueUSD || 0;
+        const posId = generateId(p);
+        if (!excludedPositions?.includes(posId)) {
+          groups[key].total += p.valueUSD || 0;
+        }
       }
       return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     } else {
@@ -75,47 +70,27 @@ export default function PositionsTable() {
         const key = p.address.toLowerCase();
         if (!groups[key]) groups[key] = { title, total: 0, rows: [] as any };
         groups[key].rows.push(p);
-        groups[key].total += p.valueUSD || 0;
+        const posId = generateId(p);
+        if (!excludedPositions?.includes(posId)) {
+          groups[key].total += p.valueUSD || 0;
+        }
       }
       return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [data, groupMode, labelFor]);
+  }, [data, groupMode, labelFor, excludedPositions, generateId]);
 
-  // State for chain icons fetched from CoinGecko
-  const [chainIcons, setChainIcons] = useState<Record<string, string>>({});
-
-  // Fetch icons when new chains appear in the data
-  useEffect(() => {
-    const uniqueChains = Array.from(new Set(data?.map((p) => p.chain) || []));
-    uniqueChains.forEach((chain) => {
-      if (chainIcons[chain]) return;
-      const id = chainToCoingeckoId[chain];
-      if (!id) return;
-      fetch(`https://api.coingecko.com/api/v3/coins/${id}`)
-        .then((res) => res.json())
-        .then((json) => {
-          const icon = json?.image?.small || json?.image?.thumb || json?.image?.large || "";
-          if (icon) {
-            setChainIcons((prev) => ({ ...prev, [chain]: icon }));
-          }
-        })
-        .catch(() => {
-          // ignore errors
-        });
-    });
-  }, [data, chainIcons]);
-
-  // Column widths: owner/protocol, asset, source, chain, APY, value, current yield
+  // Column widths: include toggle, owner/protocol, asset icon, source, chain, APR, APY, amount, value, claimable
   const Cols = () => (
     <colgroup>
-      <col style={{ width: "10%" }} />
-      <col style={{ width: "20%" }} />
-      <col style={{ width: "10%" }} />
-      <col style={{ width: "6%" }} />
-      <col style={{ width: "8%" }} />
+      <col style={{ width: "2%" }} />
       <col style={{ width: "8%" }} />
       <col style={{ width: "16%" }} />
-      <col style={{ width: "24%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "6%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "18%" }} />
+      <col style={{ width: "18%" }} />
     </colgroup>
   );
 
@@ -141,7 +116,14 @@ export default function PositionsTable() {
         </div>
       </CardHeader>
       <CardContent>
-        {isLoading && <LoadingSkeleton />}
+        {isLoading && (
+          <div className="animate-pulse space-y-2">
+            <div className="h-8 w-1/3 rounded bg-white/10" />
+            <div className="h-5 w-full rounded bg-white/10" />
+            <div className="h-5 w-full rounded bg-white/10" />
+            <div className="h-5 w-full rounded bg-white/10" />
+          </div>
+        )}
         {isError && <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>}
         {!isLoading && !isError && (!data || data.length === 0) && (
           <EmptyState title="No positions found" hint="Add an address to start tracking." />
@@ -157,18 +139,19 @@ export default function PositionsTable() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm table-fixed">
+                  <table className="w-full text-sm">
                     <Cols />
                     <thead className="sticky top-0 bg-bg">
                       <tr className="text-left">
+                        <th className="py-2 px-3"></th>
                         {groupMode === "protocol" ? (
                           <>
-                            <th className="py-2 px-3">Wallet</th>
+                            <th className="py-2 px-3 text-center">Wallet</th>
                             <th className="py-2 px-3 text-center">Asset</th>
                           </>
                         ) : (
                           <>
-                            <th className="py-2 px-3">Protocol</th>
+                            <th className="py-2 px-3 text-center">Protocol</th>
                             <th className="py-2 px-3 text-center">Asset</th>
                           </>
                         )}
@@ -177,68 +160,92 @@ export default function PositionsTable() {
                         <th className="py-2 px-3 text-center">APR (7d)</th>
                         <th className="py-2 px-3 text-center">APY</th>
                         <th className="py-2 px-3 text-center">Value</th>
-                        <th className="py-2 px-3 text-right">Current yield</th>
+                        <th className="py-2 px-3 text-right">Claimable</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {g.rows.map((p, i) => (
-                        <tr key={i} className="border-t border-white/10">
-                          {groupMode === "protocol" ? (
-                            <td className="py-2 px-3">{displayOwner(p.address)}</td>
-                          ) : (
-                            <td className="py-2 px-3 capitalize">
-                              {protocolLinks[p.protocol] ? (
-                                <a
-                                  href={protocolLinks[p.protocol]}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-brand hover:underline capitalize"
-                                >
-                                  {p.protocol}
-                                </a>
+                      {g.rows.map((p, i) => {
+                        const posId = generateId(p);
+                        const isExcluded = excludedPositions?.includes(posId);
+
+                        return (
+                          <tr key={i} className={`border-t border-white/10 ${isExcluded ? "opacity-50" : ""}`}>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                onClick={() => togglePositionExcluded(posId)}
+                                aria-label="toggle position"
+                                className="p-1"
+                              >
+                                {isExcluded ? (
+                                  <EyeOff className="h-4 w-4 text-red-400" />
+                                ) : (
+                                  <Eye className="h-4 w-4 text-green-400" />
+                                )}
+                              </button>
+                            </td>
+                            {groupMode === "protocol" ? (
+                              <td className="py-2 px-3 text-center">{displayOwner(p.address)}</td>
+                            ) : (
+                              <td className="py-2 px-3 capitalize text-center">{p.protocol}</td>
+                            )}
+                            {/* Asset */}
+                            <td className="py-2 px-3 text-center">{p.asset}</td>
+                            {/* Source */}
+                            <td className="py-2 px-3 text-center">{p.marketProtocol ?? "-"}</td>
+                            {/* Chain */}
+                            <td className="py-2 px-3 text-center capitalize">
+                              {(icons as { [_: string]: string })[p.chain] ? (
+                                <div className="inline-flex items-center justify-center w-6 h-6 bg-white/10 rounded-full">
+                                  <img
+                                    src={(icons as { [_: string]: string })[p.chain]}
+                                    alt={p.chain}
+                                    className="w-4 h-4"
+                                  />
+                                </div>
                               ) : (
-                                p.protocol
+                                p.chain
                               )}
                             </td>
-                          )}
-                          <td className="py-2 px-3 text-center truncate">{p.asset}</td>
-                          <td className="py-2 px-3 text-center">{p.marketProtocol ?? "-"}</td>
-                          <td className="py-2 px-3 text-center capitalize">
-                            {chainIcons[p.chain] ? (
-                              <div className="inline-flex items-center justify-center w-6 h-6 bg-white/10 rounded-full">
-                                <img src={chainIcons[p.chain]} alt={p.chain} className="w-4 h-4" />
-                              </div>
-                            ) : (
-                              p.chain
-                            )}
-                          </td>
-                          {/* 7‑day APR */}
-                          <td className="py-2 px-3 text-center">
-                            {(() => {
-                              const apr = p.apr7d;
-                              if (apr === undefined) return "-";
-                              // Apply color to negative yields (e.g. YT tokens)
-                              const isNeg = apr < 0;
-                              const colorClass =
-                                isNeg && apr <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
-                              return <span className={colorClass}>{formatPct(apr)}</span>;
-                            })()}
-                          </td>
-                          {/* APY */}
-                          <td className="py-2 px-3 text-center">
-                            {(() => {
-                              const apy = p.apy;
-                              if (apy === undefined) return "-";
-                              const isNeg = apy < 0;
-                              const colorClass =
-                                isNeg && apy <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
-                              return <span className={colorClass}>{formatPct(apy)}</span>;
-                            })()}
-                          </td>
-                          <td className="py-2 px-3 text-center tabular-nums">{formatUSD(p.valueUSD)}</td>
-                          <td className="py-2 px-3 text-right">{p.claimableRewards ?? "-"}</td>
-                        </tr>
-                      ))}
+                            {/* 7‑day APR */}
+                            <td className="py-2 px-3 text-center">
+                              {(() => {
+                                const apr = p.apr7d;
+                                if (apr === undefined) return "-";
+                                const isNeg = apr < 0;
+                                const colorClass =
+                                  isNeg && apr <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
+                                return <span className={colorClass}>{formatPct(apr)}</span>;
+                              })()}
+                            </td>
+                            {/* APY */}
+                            <td className="py-2 px-3 text-center">
+                              {(() => {
+                                const apyVal = p.apy;
+                                if (apyVal === undefined) return "-";
+                                const isNeg = apyVal < 0;
+                                const colorClass =
+                                  isNeg && apyVal <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
+                                return <span className={colorClass}>{formatPct(apyVal)}</span>;
+                              })()}
+                            </td>
+                            {/* Value */}
+                            <td className="py-2 px-3 text-center tabular-nums">{formatUSD(p.valueUSD)}</td>
+                            {/* Claimable */}
+                            <td className="py-2 px-3 text-right">
+                              {p.claimableRewards ? (
+                                <>
+                                  {p.claimableRewards}
+                                  {p.claimableRewardsValueUSD !== undefined && p.claimableRewardsValueUSD > 0 && (
+                                    <> ({formatUSD(p.claimableRewardsValueUSD)})</>
+                                  )}
+                                </>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
