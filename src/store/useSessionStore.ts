@@ -34,22 +34,24 @@ export const useSessionStore = create<SessionState>()(
           throw new Error("Invalid EVM address");
         }
         const id = idFor(address);
-        const exists = get().addresses.some(a => a.id === id);
+        const exists = get().addresses.some((a) => a.id === id);
         if (exists) return;
-        set(s => ({
-          addresses: [...s.addresses, { id, address, label }]
+        set((s) => ({
+          addresses: [...s.addresses, { id, address, label }],
         }));
       },
-      removeAddress: id => {
-        set(s => ({ addresses: s.addresses.filter(a => a.id !== id) }));
+      removeAddress: (id) => {
+        set((s) => ({ addresses: s.addresses.filter((a) => a.id !== id) }));
       },
       setAddressLabel: (id, label) => {
-        set(s => ({
-          addresses: s.addresses.map(a => (a.id === id ? { ...a, label: label || undefined } : a))
+        set((s) => ({
+          addresses: s.addresses.map((a) =>
+            a.id === id ? { ...a, label: label || undefined } : a
+          ),
         }));
       },
-      setRPC: url => set({ rpcUrl: url }),
-      setWC: id => set({ wcProjectId: id || undefined })
+      setRPC: (url) => set({ rpcUrl: url }),
+      setWC: (id) => set({ wcProjectId: id || undefined }),
     }),
     { name: "session" }
   )

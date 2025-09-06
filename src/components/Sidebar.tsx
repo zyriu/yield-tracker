@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
+import { CopyIcon } from "@/components/ui/copy-icon";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { shortAddress } from "@/utils/format";
@@ -93,15 +94,29 @@ export default function Sidebar() {
                   <div className="min-w-0 flex-1">
                     {!isEditing ? (
                       <>
-                        <div
-                          className="text-sm font-semibold truncate cursor-pointer"
-                          onClick={() => startEdit(a.id, a.label)}
-                          title={displayTop || undefined}
-                        >
-                          {displayTop}
+                        <div className="flex gap-3">
+                          <div
+                            className="text-sm font-semibold truncate cursor-pointer"
+                            onClick={() => startEdit(a.id, a.label)}
+                            title={displayTop || undefined}
+                          >
+                            {displayTop}
+                          </div>
+                          {!displayBottom && (
+                            <CopyIcon
+                              value={a.address}
+                              className="text-neutral-500 hover:text-neutral-300"
+                            />
+                          )}
                         </div>
                         {displayBottom && (
-                          <div className="text-xs text-text-muted font-mono">{displayBottom}</div>
+                          <div className="flex gap-2">
+                            <div className="text-xs text-text-muted font-mono">{displayBottom}</div>
+                            <CopyIcon
+                              value={a.address}
+                              className="text-neutral-500 hover:text-neutral-300"
+                            />
+                          </div>
                         )}
                       </>
                     ) : (

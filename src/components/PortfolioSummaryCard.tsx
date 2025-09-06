@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
+import { getPricesUSD } from "@/lib/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 import { formatPct, formatUSD } from "@/utils/format";
 
@@ -29,35 +30,15 @@ export default function PortfolioSummaryCard() {
     enabled: addresses.length > 0,
   });
 
-  // Fetch BTC and SOL prices from CoinGecko (denominated in USD)
-  const [prices, setPrices] = useState<{
-    btc: number | null;
-    eth: number | null;
-    sol: number | null;
-  }>({
-    btc: null,
-    eth: null,
-    sol: null,
+  // Fetch USDe, BTC, ETH and SOL prices from CoinGecko using a single call.
+  // This hook returns a price map keyed by asset symbol. If the fetch fails or
+  // is still loading, the values will be undefined.
+  const { data: priceData } = useQuery({
+    queryKey: ["coingecko-prices"],
+    queryFn: getPricesUSD,
   });
 
-  useEffect(() => {
-    fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd"
-    )
-      .then((res) => res.json())
-      .then((json) => {
-        setPrices({
-          btc: json?.bitcoin?.usd ?? null,
-          eth: json?.ethereum?.usd ?? null,
-          sol: json?.solana?.usd ?? null,
-        });
-      })
-      .catch(() => {
-        // ignore network errors
-      });
-  }, []);
-
-  // State for selected denomination (usd, btc or sol)
+  // State for selected denomination (usd, btc, eth or sol)
   const [currency, setCurrency] = useState<"usd" | "btc" | "eth" | "sol">("usd");
 
   // Sum the USD value of all positions
@@ -73,21 +54,23 @@ export default function PortfolioSummaryCard() {
     let nominalSum = 0;
     data.forEach((p) => {
       const val = p.valueUSD || 0;
-      const apy = p.apy30d ?? p.apr30d ?? p.apr7d ?? 0;
+      // Determine the position's APR/APY (prefer 30d APY, then 30d APR, then 7d APR)
+      let apy = p.apy30d ?? p.apr30d ?? p.apr7d ?? 0;
+      // Treat negative yields (e.g. YT tokens) as zero
+      if (apy < 0) apy = 0;
       weightedSum += val * apy;
       nominalSum += val * apy;
     });
-    return {
-      weightedYield: totalUSD > 0 ? weightedSum / totalUSD : 0,
-      nominalYieldUSD: nominalSum,
-    };
+    // Divide by totalUSD so zero‑yield positions still contribute to the denominator
+    const weightedYield = totalUSD > 0 ? weightedSum / totalUSD : 0;
+    return { weightedYield, nominalYieldUSD: nominalSum };
   }, [data, totalUSD]);
 
   // Determine conversion price based on selected currency
   let denomPrice: number | null = 1;
-  if (currency === "btc") denomPrice = prices.btc;
-  if (currency === "eth") denomPrice = prices.eth;
-  if (currency === "sol") denomPrice = prices.sol;
+  if (currency === "btc") denomPrice = priceData?.btc ?? null;
+  if (currency === "eth") denomPrice = priceData?.eth ?? null;
+  if (currency === "sol") denomPrice = priceData?.sol ?? null;
 
   // Convert total and nominal yields into the selected currency
   const totalInSelected = denomPrice && denomPrice > 0 ? totalUSD / denomPrice : null;

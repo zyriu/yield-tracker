@@ -4,20 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import EmptyState from "./EmptyState";
 import LoadingSkeleton from "./LoadingSkeleton";
 import { Button } from "./ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
-import { formatUSD, formatPct, shortAddress } from "@/utils/format";
+import { formatPct, formatUSD, shortAddress } from "@/utils/format";
 
 // Helper to fetch positions across multiple protocols for all addresses
 const fetchAll = async (addresses: string[]) => {
   const protocols = Object.keys(adapters);
-  const res = await Promise.all(
-    addresses.map((addr) => fetchPositionsForAddress(addr, protocols))
-  );
+  const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols)));
   return res.flat();
 };
 
@@ -44,64 +42,40 @@ export default function PositionsTable() {
   const groupMode = useUIStore((s) => s.groupMode);
   const setGroupMode = useUIStore((s) => s.setGroupMode);
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isFetching,
-  } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["positions", addresses, rpc],
     queryFn: () => fetchAll(addresses),
     enabled: addresses.length > 0,
   });
 
   const labelFor = useMemo(
-    () =>
-      Object.fromEntries(
-        addressItems.map((a) => [a.address.toLowerCase(), a.label] as const)
-      ),
+    () => Object.fromEntries(addressItems.map((a) => [a.address.toLowerCase(), a.label] as const)),
     [addressItems]
   );
-  const displayOwner = (addr: string) =>
-    labelFor[addr.toLowerCase()] || shortAddress(addr);
+  const displayOwner = (addr: string) => labelFor[addr.toLowerCase()] || shortAddress(addr);
 
   // Group positions either by protocol or by wallet address
   const grouped = useMemo(() => {
     if (!data) return [];
     if (groupMode === "protocol") {
-      const groups: Record<
-        string,
-        { title: string; total: number; rows: typeof data }
-      > = {};
+      const groups: Record<string, { title: string; total: number; rows: typeof data }> = {};
       for (const p of data) {
         const key = p.protocol;
-        if (!groups[key])
-          groups[key] = { title: p.protocol, total: 0, rows: [] as any };
+        if (!groups[key]) groups[key] = { title: p.protocol, total: 0, rows: [] as any };
         groups[key].rows.push(p);
         groups[key].total += p.valueUSD || 0;
       }
-      return Object.values(groups).sort((a, b) =>
-        a.title.localeCompare(b.title)
-      );
+      return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     } else {
-      const groups: Record<
-        string,
-        { title: string; total: number; rows: typeof data }
-      > = {};
+      const groups: Record<string, { title: string; total: number; rows: typeof data }> = {};
       for (const p of data) {
-        const title =
-          labelFor[p.address.toLowerCase()] || shortAddress(p.address);
+        const title = labelFor[p.address.toLowerCase()] || shortAddress(p.address);
         const key = p.address.toLowerCase();
-        if (!groups[key])
-          groups[key] = { title, total: 0, rows: [] as any };
+        if (!groups[key]) groups[key] = { title, total: 0, rows: [] as any };
         groups[key].rows.push(p);
         groups[key].total += p.valueUSD || 0;
       }
-      return Object.values(groups).sort((a, b) =>
-        a.title.localeCompare(b.title)
-      );
+      return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     }
   }, [data, groupMode, labelFor]);
 
@@ -110,9 +84,7 @@ export default function PositionsTable() {
 
   // Fetch icons when new chains appear in the data
   useEffect(() => {
-    const uniqueChains = Array.from(
-      new Set(data?.map((p) => p.chain) || [])
-    );
+    const uniqueChains = Array.from(new Set(data?.map((p) => p.chain) || []));
     uniqueChains.forEach((chain) => {
       if (chainIcons[chain]) return;
       const id = chainToCoingeckoId[chain];
@@ -120,11 +92,7 @@ export default function PositionsTable() {
       fetch(`https://api.coingecko.com/api/v3/coins/${id}`)
         .then((res) => res.json())
         .then((json) => {
-          const icon =
-            json?.image?.small ||
-            json?.image?.thumb ||
-            json?.image?.large ||
-            "";
+          const icon = json?.image?.small || json?.image?.thumb || json?.image?.large || "";
           if (icon) {
             setChainIcons((prev) => ({ ...prev, [chain]: icon }));
           }
@@ -138,8 +106,8 @@ export default function PositionsTable() {
   // Column widths: owner/protocol, asset, source, chain, APY, value, current yield
   const Cols = () => (
     <colgroup>
-      <col style={{ width: "18%" }} />
-      <col style={{ width: "14%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "20%" }} />
       <col style={{ width: "12%" }} />
       <col style={{ width: "10%" }} />
       <col style={{ width: "18%" }} />
@@ -161,20 +129,14 @@ export default function PositionsTable() {
             <Select
               value={groupMode}
               onChange={(e) =>
-                setGroupMode(
-                  (e.target.value as "protocol" | "wallet") ?? "protocol"
-                )
+                setGroupMode((e.target.value as "protocol" | "wallet") ?? "protocol")
               }
               className="min-w-[140px]"
             >
               <option value="protocol">Protocol</option>
               <option value="wallet">Wallet</option>
             </Select>
-            <Button
-              onClick={() => refetch()}
-              disabled={isFetching}
-              className="px-6"
-            >
+            <Button onClick={() => refetch()} disabled={isFetching} className="px-6">
               {isFetching ? "Refreshing…" : "Refresh"}
             </Button>
           </div>
@@ -182,31 +144,18 @@ export default function PositionsTable() {
       </CardHeader>
       <CardContent>
         {isLoading && <LoadingSkeleton />}
-        {isError && (
-          <p className="text-sm text-red-400">
-            {(error as Error)?.message ?? "Error"}
-          </p>
-        )}
+        {isError && <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>}
         {!isLoading && !isError && (!data || data.length === 0) && (
-          <EmptyState
-            title="No positions found"
-            hint="Add an address to start tracking."
-          />
+          <EmptyState title="No positions found" hint="Add an address to start tracking." />
         )}
         {!isLoading && data && data.length > 0 && (
           <div className="space-y-5">
             {grouped.map((g, gi) => (
-              <div
-                key={gi}
-                className="rounded-lg border border-white/10 bg-white/5"
-              >
+              <div key={gi} className="rounded-lg border border-white/10 bg-white/5">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <div className="text-sm font-semibold capitalize">
-                    {g.title}
-                  </div>
+                  <div className="text-sm font-semibold capitalize">{g.title}</div>
                   <div className="text-sm font-medium text-white">
-                    Total:{" "}
-                    <span className="font-semibold">{formatUSD(g.total)}</span>
+                    Total: <span className="font-semibold">{formatUSD(g.total)}</span>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -236,9 +185,7 @@ export default function PositionsTable() {
                       {g.rows.map((p, i) => (
                         <tr key={i} className="border-t border-white/10">
                           {groupMode === "protocol" ? (
-                            <td className="py-2 px-3">
-                              {displayOwner(p.address)}
-                            </td>
+                            <td className="py-2 px-3">{displayOwner(p.address)}</td>
                           ) : (
                             <td className="py-2 px-3 capitalize">
                               {protocolLinks[p.protocol] ? (
@@ -255,20 +202,12 @@ export default function PositionsTable() {
                               )}
                             </td>
                           )}
-                          <td className="py-2 px-3 text-center truncate">
-                            {p.asset}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {p.marketProtocol ?? "-"}
-                          </td>
+                          <td className="py-2 px-3 text-center truncate">{p.asset}</td>
+                          <td className="py-2 px-3 text-center">{p.marketProtocol ?? "-"}</td>
                           <td className="py-2 px-3 text-center capitalize">
                             {chainIcons[p.chain] ? (
                               <div className="inline-flex items-center justify-center w-6 h-6 bg-white/10 rounded-full">
-                                <img
-                                  src={chainIcons[p.chain]}
-                                  alt={p.chain}
-                                  className="w-4 h-4"
-                                />
+                                <img src={chainIcons[p.chain]} alt={p.chain} className="w-4 h-4" />
                               </div>
                             ) : (
                               p.chain
@@ -280,24 +219,18 @@ export default function PositionsTable() {
                               if (apy === undefined) return "-";
                               const isYT = p.asset.startsWith("YT-");
                               const colorClass =
-                                isYT && apy <= -1
+                                isYT && apy <= -0.99
                                   ? "text-red-500"
                                   : isYT && apy < 0
-                                  ? "text-orange-500"
-                                  : "";
-                              return (
-                                <span className={colorClass}>
-                                  {formatPct(apy)}
-                                </span>
-                              );
+                                    ? "text-orange-500"
+                                    : "";
+                              return <span className={colorClass}>{formatPct(apy)}</span>;
                             })()}
                           </td>
                           <td className="py-2 px-3 text-center tabular-nums">
                             {formatUSD(p.valueUSD)}
                           </td>
-                          <td className="py-2 px-3 text-right">
-                            {p.claimableRewards ?? "-"}
-                          </td>
+                          <td className="py-2 px-3 text-right">{p.claimableRewards ?? "-"}</td>
                         </tr>
                       ))}
                     </tbody>
