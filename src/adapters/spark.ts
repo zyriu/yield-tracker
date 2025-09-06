@@ -19,6 +19,8 @@ export const fetchSparkPositions: FetchPositions = async ({ address }) => {
       { address: SPK_TOKEN, abi: ERC20_ABI, functionName: "symbol" },
     ]);
 
+    console.log(user, results);
+
     const rawDeposit = results[0] as bigint | null;
     const rawEarned = results[1] as bigint | null;
     const usdsDecimals = results[2] as number | null;
@@ -40,7 +42,7 @@ export const fetchSparkPositions: FetchPositions = async ({ address }) => {
       if (earned > 0) {
         const symbol = spkSymbol || "SPK";
         // Show up to 6 decimals for readability
-        claimable = `${earned.toFixed(6)} ${symbol}`;
+        claimable = `${earned.toFixed(2)} ${symbol}`;
       }
     }
 

@@ -84,9 +84,9 @@ export default function PortfolioSummaryCard() {
   function formatValue(val: number | null): string {
     if (val === null) return "-";
     if (currency === "usd") return formatUSD(val);
-    if (currency === "btc") return `${val.toFixed(6)} BTC`;
-    if (currency === "eth") return `${val.toFixed(6)} ETH`;
-    if (currency === "sol") return `${val.toFixed(6)} SOL`;
+    if (currency === "btc") return `${val.toFixed(4)} BTC`;
+    if (currency === "eth") return `${val.toFixed(3)} ETH`;
+    if (currency === "sol") return `${val.toFixed(2)} SOL`;
     return val.toString();
   }
 

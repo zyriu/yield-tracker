@@ -11,7 +11,7 @@ function getRpcUrl(): string {
   }
 
   // Fallback to default Ankr endpoint.
-  return "https://rpc.ankr.com/eth";
+  return "https://eth.llamarpc.com";
 }
 
 export const publicClient = createPublicClient({
