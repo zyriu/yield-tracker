@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { HttpStatusCode } from "axios";
 
 import type { FetchPositions, Position } from "./types";
 
@@ -35,6 +35,7 @@ function toBigIntOrZero(x: any): bigint {
   } catch {
     /* empty */
   }
+
   return 0n;
 }
 
@@ -68,11 +69,14 @@ function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
  * value as both the 7‑day APR and the APY.
  */
 export const fetchPendlePositions: FetchPositions = async ({ address }) => {
-  const url = `${PENDLE_POSITIONS_API}/${address.toLowerCase()}`;
   let json: AnyObj;
   try {
-    const { data, status } = await axios(url, { headers: { accept: "application/json" } });
-    if (status !== 200) return [];
+    const { data, status } = await axios.get(`${PENDLE_POSITIONS_API}/${address.toLowerCase()}`, {
+      headers: { accept: "application/json" },
+    });
+
+    if (status !== HttpStatusCode.Ok) return [];
+
     json = data;
   } catch {
     return [];
@@ -95,16 +99,20 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
       marketDataCache[marketId] = undefined;
       return undefined;
     }
-    const api = `${PENDLE_MARKET_DATA_BASE}/${chainIdStr}/markets/${marketAddr}/data`;
+
     try {
-      const { data, status } = await axios(api, { headers: { accept: "application/json" } });
-      if (status === 200) {
+      const { data, status } = await axios.get(`${PENDLE_MARKET_DATA_BASE}/${chainIdStr}/markets/${marketAddr}/data`, {
+        headers: { accept: "application/json" },
+      });
+
+      if (status === HttpStatusCode.Ok) {
         marketDataCache[marketId] = data;
         return data;
       }
     } catch {
       /* empty */
     }
+
     marketDataCache[marketId] = undefined;
     return undefined;
   }
@@ -112,21 +120,26 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   // Fetch detailed market info (includes protocol field)
   async function getMarketDetails(marketId: string): Promise<any | undefined> {
     if (marketId in marketDetailsCache) return marketDetailsCache[marketId];
+
     const [chainIdStr, marketAddr] = marketId.split("-");
     if (!chainIdStr || !marketAddr) {
       marketDetailsCache[marketId] = undefined;
       return undefined;
     }
-    const api = `${PENDLE_MARKET_DETAILS_BASE}/${chainIdStr}/markets/${marketAddr}`;
+
     try {
-      const { data, status } = await axios(api, { headers: { accept: "application/json" } });
-      if (status === 200) {
+      const { data, status } = await axios.get(`${PENDLE_MARKET_DETAILS_BASE}/${chainIdStr}/markets/${marketAddr}`, {
+        headers: { accept: "application/json" },
+      });
+
+      if (status === HttpStatusCode.Ok) {
         marketDetailsCache[marketId] = data;
         return data;
       }
     } catch {
       /* empty */
     }
+
     marketDetailsCache[marketId] = undefined;
     return undefined;
   }
@@ -138,20 +151,24 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
       const { data, status } = await axios.get(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
         headers: { accept: "application/json" },
       });
-      if (status === 200 && Array.isArray(data)) {
-        for (const m of data) {
-          if (m?.address && m?.name && m?.expiry) {
-            const key = `${chainId}-${m.address}`;
-            marketMetaCache[key] = {
-              name: m.name,
-              expiry: m.expiry,
-            };
+      if (status === HttpStatusCode.Ok) {
+        const { markets } = data;
+        if (Array.isArray(markets)) {
+          for (const m of markets) {
+            if (m?.address && m?.name && m?.expiry) {
+              const key = `${chainId}-${m.address}`;
+              marketMetaCache[key] = {
+                name: m.name,
+                expiry: m.expiry,
+              };
+            }
           }
         }
       }
     } catch {
       /* empty */
     }
+
     activeMarketsFetched[chainId] = true;
   }
 
