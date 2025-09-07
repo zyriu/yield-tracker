@@ -9,6 +9,7 @@ import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
 import { getIcons } from "@/lib/icons";
+import { getPricesUSD } from "@/lib/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD, shortAddress } from "@/utils/format";
@@ -28,14 +29,16 @@ export default function PositionsTable() {
   const generateId = (p: any): string =>
     [p.protocol, p.chain, p.address?.toLowerCase?.(), p.asset, p.marketProtocol ?? ""].join(":");
 
+  const { pricesUSD, isLoading: pricesLoading } = getPricesUSD();
+
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["positions", addresses],
     queryFn: async () => {
       const protocols = Object.keys(adapters);
-      const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols)));
+      const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols, pricesUSD!)));
       return res.flat();
     },
-    enabled: addresses.length > 0,
+    enabled: addresses.length > 0 && !pricesLoading,
     staleTime: 60_000,
   });
 

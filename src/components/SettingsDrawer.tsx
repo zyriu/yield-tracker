@@ -40,7 +40,7 @@ export default function SettingsDrawer() {
             &times;
           </button>
         </div>
-        <div className="space-y-5">
+        <div className="space-y-2">
           <div>
             <Label htmlFor="rpc">Ethereum RPC URL</Label>
             <Input
@@ -53,7 +53,6 @@ export default function SettingsDrawer() {
                 setMainnetRpcErr(validateRpc(v));
               }}
             />
-            <p className="mt-1 text-xs text-text-muted">Used for reads—stored locally in your browser.</p>
             {mainnetRpcErr && <p className="mt-1 text-xs text-red-400">{mainnetRpcErr}</p>}
           </div>
           <div>

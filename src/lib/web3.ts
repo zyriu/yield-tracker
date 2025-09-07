@@ -72,4 +72,31 @@ export const STAKING_REWARDS_ABI = [
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "event",
+    name: "Staked",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Withdrawn",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RewardPaid",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "reward", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
 ] as const;

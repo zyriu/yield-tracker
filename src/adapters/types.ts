@@ -1,3 +1,5 @@
+import { Prices } from "@/lib/prices";
+
 export type Protocol = "pendle" | "ethena" | "spark" | "sky";
 export type Chain = "ethereum" | "arbitrum" | "hyperliquid";
 
@@ -15,4 +17,4 @@ export interface Position {
   claimableRewardsValueUSD?: number;
 }
 
-export type FetchPositions = (args: { address: string }) => Promise<Position[]>;
+export type FetchPositions = (args: { address: string; pricesUSD: Prices }) => Promise<Position[]>;

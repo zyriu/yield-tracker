@@ -10,26 +10,24 @@ import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD } from "@/utils/format";
 
-const fetchAllPositions = async (addresses: string[]) => {
-  const protocols = Object.keys(adapters);
-  const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols)));
-  return res.flat();
-};
-
 export default function PortfolioSummaryCard() {
   // Gather all tracked addresses and RPC URL
   const addresses = useSessionStore((s) => s.addresses.map((a) => a.address));
 
+  const { pricesUSD, isLoading: pricesLoading } = getPricesUSD();
+
   // Query all positions for the tracked addresses
   const { data: positions, isLoading: positionsLoading } = useQuery({
     queryKey: ["portfolio-summary", addresses],
-    queryFn: () => fetchAllPositions(addresses),
-    enabled: addresses.length > 0,
+    queryFn: async () => {
+      const protocols = Object.keys(adapters);
+      const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols, pricesUSD!)));
+      return res.flat();
+    },
+    enabled: addresses.length > 0 && !pricesLoading,
     refetchInterval: 1000 * 60 * 5,
     staleTime: 1_000 * 60 * 5,
   });
-
-  const { pricesUSD, isLoading: pricesLoading } = getPricesUSD();
 
   // State for selected denomination (usd, btc, eth or sol)
   const [currency, setCurrency] = useState<"usd" | "btc" | "eth" | "sol">("usd");

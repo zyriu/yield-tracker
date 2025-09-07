@@ -3,7 +3,6 @@ import { formatUnits } from "viem";
 import type { FetchPositions, Position } from "./types";
 
 import { multicall } from "@/lib/multicall";
-import { getPricesUSD } from "@/lib/prices";
 import { mainnetClient } from "@/lib/viem";
 import { ETHENA_ABI, SUSDE } from "@/lib/web3";
 
@@ -11,7 +10,7 @@ import { ETHENA_ABI, SUSDE } from "@/lib/web3";
 const BLOCKS_7D = 50_400n;
 const BLOCKS_30D = 216_000n;
 
-export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
+export const fetchEthenaPositions: FetchPositions = async ({ address, pricesUSD }) => {
   const out: Position[] = [];
 
   try {
@@ -59,7 +58,6 @@ export const fetchEthenaPositions: FetchPositions = async ({ address }) => {
       apy = Math.pow(1 + r7, 365 / 7) - 1;
     }
 
-    const { pricesUSD } = getPricesUSD();
     const assetsNowFloat = Number(formatUnits(assetsNow, decimals));
     const valueUSD = assetsNowFloat * pricesUSD!.usde;
 

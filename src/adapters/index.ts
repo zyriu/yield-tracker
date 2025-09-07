@@ -5,6 +5,8 @@ import { fetchSparkPositions } from "./spark";
 
 import type { FetchPositions, Protocol } from "./types";
 
+import { Prices } from "@/lib/prices";
+
 export const adapters: Record<Protocol, FetchPositions> = {
   pendle: fetchPendlePositions,
   ethena: fetchEthenaPositions,
@@ -12,13 +14,13 @@ export const adapters: Record<Protocol, FetchPositions> = {
   sky: fetchSkyPositions,
 };
 
-export async function fetchPositionsForAddress(address: string, protocols: string[]) {
+export async function fetchPositionsForAddress(address: string, protocols: string[], pricesUSD: Prices) {
   const results: Promise<any[]>[] = [];
 
   for (const protocol of protocols) {
     const fn = adapters[protocol as Protocol];
     if (fn) {
-      results.push(fn({ address }));
+      results.push(fn({ address, pricesUSD }));
     }
   }
 
