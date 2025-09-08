@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Settings } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 
 import { Button } from "./ui/button";
 
@@ -9,6 +10,7 @@ import { useUIStore } from "@/store/useUIStore";
 export default function TopNav() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const openSettings = useUIStore((s) => s.openSettings);
+  const location = useLocation();
 
   // Block numbers for Ethereum, Arbitrum and Hyperliquid
   const { data: ethBlock } = useQuery({
@@ -39,7 +41,28 @@ export default function TopNav() {
           </Button>
         </div>
         <div className="flex justify-center items-center">
-          <h1>Yield Tracker</h1>
+          <nav className="flex gap-4">
+            <Link 
+              to="/" 
+              className={`px-4 py-2 rounded-md transition-colors ${
+                location.pathname === "/" 
+                  ? "bg-primary text-primary-foreground" 
+                  : "text-text-muted hover:text-text hover:bg-white/5"
+              }`}
+            >
+              Dashboard
+            </Link>
+            <Link 
+              to="/yield" 
+              className={`px-4 py-2 rounded-md transition-colors ${
+                location.pathname === "/yield" 
+                  ? "bg-primary text-primary-foreground" 
+                  : "text-text-muted hover:text-text hover:bg-white/5"
+              }`}
+            >
+              Yield
+            </Link>
+          </nav>
         </div>
         <div className="flex justify-end items-center pr-2 gap-4">
           <div className="flex gap-3 text-xs text-text-muted">
