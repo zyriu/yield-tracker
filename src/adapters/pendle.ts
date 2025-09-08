@@ -209,7 +209,6 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
         const asset = assetLabel(kind, marketId);
 
         let apr7d: number | undefined;
-        let apy: number | undefined;
 
         // Derive yields from marketData: use impliedApy for PT,
         // ytFloatingApy for YT, aggregatedApy for LP.
@@ -218,19 +217,16 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
             const implied = toNumber(marketData.impliedApy);
             if (implied !== undefined) {
               apr7d = implied;
-              apy = implied;
             }
           } else if (kind === "yt") {
             const ytFloat = toNumber(marketData.ytFloatingApy);
             if (ytFloat !== undefined) {
               apr7d = ytFloat;
-              apy = ytFloat;
             }
           } else if (kind === "lp") {
             const agg = toNumber(marketData.aggregatedApy);
             if (agg !== undefined) {
               apr7d = agg;
-              apy = agg;
             }
           }
         }
@@ -252,7 +248,7 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           asset,
           marketProtocol: protocolName,
           apr7d,
-          apy,
+          lifetimeAPR: 0,
           valueUSD: valuation > 0 ? valuation : 0,
           detailsUrl,
         });

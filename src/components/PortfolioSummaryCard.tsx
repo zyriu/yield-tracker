@@ -56,8 +56,7 @@ export default function PortfolioSummaryCard() {
     let nominalSum = 0;
     relevantPositions.forEach((p) => {
       const val = p.valueUSD || 0;
-      // Determine the position's APR/APY (prefer 30d APY, then 30d APR, then 7d APR)
-      let apy: number = (p as any).apy30d ?? (p as any).apr30d ?? p.apr7d ?? 0;
+      let apy: number = p.apr7d ?? 0;
       // Treat negative yields (e.g. YT tokens) as zero
       if (apy < 0) apy = 0;
       weightedSum += val * apy;
@@ -126,7 +125,7 @@ export default function PortfolioSummaryCard() {
               <span className="text-base font-semibold">{formatValue(totalInSelected)}</span>
             </div>
             <div className="flex justify-between items-baseline">
-              <span className="text-sm text-text-muted">Average APY</span>
+              <span className="text-sm text-text-muted">Average 7d APR</span>
               <span className="text-sm font-semibold">{formatPct(weightedYield)}</span>
             </div>
             <div className="flex justify-between items-baseline">

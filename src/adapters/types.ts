@@ -10,7 +10,7 @@ export interface Position {
   asset: string;
   marketProtocol?: string;
   apr7d?: number;
-  apy?: number;
+  lifetimeAPR?: number;
   valueUSD: number;
   detailsUrl?: string;
   claimableRewards?: string;

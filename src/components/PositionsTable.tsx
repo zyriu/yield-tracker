@@ -159,7 +159,7 @@ export default function PositionsTable() {
                         <th className="py-2 px-3 text-center">Source</th>
                         <th className="py-2 px-3 text-center">Chain</th>
                         <th className="py-2 px-3 text-center">APR (7d)</th>
-                        <th className="py-2 px-3 text-center">APY</th>
+                        <th className="py-2 px-3 text-center">Lifetime APR</th>
                         <th className="py-2 px-3 text-center">Value</th>
                         <th className="py-2 px-3 text-right">Claimable</th>
                       </tr>
@@ -218,17 +218,8 @@ export default function PositionsTable() {
                                 return <span className={colorClass}>{formatPct(apr)}</span>;
                               })()}
                             </td>
-                            {/* APY */}
-                            <td className="py-2 px-3 text-center">
-                              {(() => {
-                                const apyVal = p.apy;
-                                if (apyVal === undefined) return "-";
-                                const isNeg = apyVal < 0;
-                                const colorClass =
-                                  isNeg && apyVal <= -0.99 ? "text-red-500" : isNeg ? "text-orange-500" : "";
-                                return <span className={colorClass}>{formatPct(apyVal)}</span>;
-                              })()}
-                            </td>
+                            {/* Lifetime APR */}
+                            <td className="py-2 px-3 text-center">-</td>
                             {/* Value */}
                             <td className="py-2 px-3 text-center tabular-nums">{formatUSD(p.valueUSD)}</td>
                             {/* Claimable */}

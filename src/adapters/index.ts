@@ -1,10 +1,9 @@
-import { fetchEthenaPositions } from "./ethena";
-import { fetchPendlePositions } from "./pendle";
-import { fetchSkyPositions } from "./sky";
-import { fetchSparkPositions } from "./spark";
-
 import type { FetchPositions, Protocol } from "./types";
 
+import { fetchEthenaPositions } from "@/adapters/ethena";
+import { fetchPendlePositions } from "@/adapters/pendle";
+import { fetchSkyPositions } from "@/adapters/sky";
+import { fetchSparkPositions } from "@/adapters/spark/spark";
 import { Prices } from "@/lib/coingecko/prices";
 
 export const adapters: Record<Protocol, FetchPositions> = {
