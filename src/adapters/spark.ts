@@ -2,6 +2,7 @@ import { Abi, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
 
+import { updateUserDepositData, getUserTotalDeposited } from "@/lib/spark/events";
 import { abis, contracts } from "@/lib/web3";
 import { multicall } from "@/lib/web3/multicall";
 import { mainnetClient } from "@/lib/web3/viem";
@@ -17,6 +18,12 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
     const user = address as `0x${string}`;
     const blockNow = await mainnetClient.getBlockNumber();
 
+    // Update deposit tracking in background (async)
+    updateUserDepositData(user).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.warn("Failed to update Spark deposit data:", error);
+    });
+
     // --- Current snapshot (1 multicall) ---
     const [rawDeposit, rawEarned, usdsDecimals, usdsSymbol, spkDecimals, spkSymbol] = (await multicall(mainnetClient, [
       { address: farm as `0x${string}`, abi: rewards, functionName: "balanceOf", args: [user], blockNumber: blockNow },
@@ -27,13 +34,24 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
       { address: spk as `0x${string}`, abi: erc20, functionName: "symbol", blockNumber: blockNow },
     ])) as [bigint | null, bigint | null, number | null, string | null, number | null, string | null];
 
-    if (!rawDeposit || rawDeposit === 0n) return out;
+    if (!rawDeposit || rawDeposit === 0n) {
+      // Even if current balance is 0, check if user has historical deposits
+      const historicalDeposited = getUserTotalDeposited(user);
+      if (historicalDeposited === 0n) {
+        return out;
+      }
+      // Continue with 0 balance but show position for tracking purposes
+    }
 
     const usdsDec = usdsDecimals ?? 18;
     const spkDec = spkDecimals ?? 18;
     const spkPrice = pricesUSD.spk ?? 0;
 
-    const valueUSD = Number(formatUnits(rawDeposit, usdsDec));
+    const valueUSD = Number(formatUnits(rawDeposit || 0n, usdsDec));
+
+    // Get historical deposit data from persistent store
+    const totalHistoricalDeposited = getUserTotalDeposited(user);
+    const historicalDepositedUSD = Number(formatUnits(totalHistoricalDeposited, usdsDec));
 
     // Claimables
     const currentEarnedFloat = rawEarned && rawEarned > 0n ? Number(formatUnits(rawEarned, spkDec)) : 0;
@@ -51,6 +69,12 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
       apr7d: 0,
       apy: 0,
       detailsUrl: "https://app.spark.fi/farms",
+      // Add metadata about historical deposits
+      metadata: {
+        currentBalance: valueUSD,
+        totalHistoricalDeposited: historicalDepositedUSD,
+        hasHistoricalData: totalHistoricalDeposited > 0n,
+      },
     });
   } catch {
     /* swallow */

@@ -15,6 +15,7 @@ export interface Position {
   detailsUrl?: string;
   claimableRewards?: string;
   claimableRewardsValueUSD?: number;
+  metadata?: Record<string, any>; // Additional protocol-specific data
 }
 
-export type FetchPositions = (_args: { address: string; pricesUSD: Prices }) => Promise<Position[]>;
+export type FetchPositions = (args: { address: string; pricesUSD: Prices }) => Promise<Position[]>;
