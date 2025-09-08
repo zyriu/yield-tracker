@@ -1,13 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Select } from "./ui/select";
-
 import { adapters, fetchPositionsForAddress } from "@/adapters";
-import { getPricesUSD } from "@/lib/coingecko/prices";
-import { useSessionStore } from "@/store/useSessionStore";
-import { useUIStore } from "@/store/useUIStore";
+import { Card, CardContent, CardHeader, CardTitle, Select } from "@/components/ui";
+import { getPricesUSD } from "@/lib/coingecko";
+import { useSessionStore, useUIStore } from "@/store";
 import { formatPct, formatUSD } from "@/utils/format";
 
 export default function PortfolioSummaryCard() {

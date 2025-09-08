@@ -3,15 +3,11 @@ import { Eye, EyeOff } from "lucide-react";
 import { useMemo } from "react";
 
 import EmptyState from "./EmptyState";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
-import { getIcons } from "@/lib/coingecko/icons";
-import { getPricesUSD } from "@/lib/coingecko/prices";
-import { useSessionStore } from "@/store/useSessionStore";
-import { useUIStore } from "@/store/useUIStore";
+import { Button, Card, CardContent, CardHeader, CardTitle, Select } from "@/components/ui";
+import { getIcons, getPricesUSD } from "@/lib/coingecko";
+import { useSessionStore, useUIStore } from "@/store";
 import { formatPct, formatUSD, shortAddress } from "@/utils/format";
 
 export default function PositionsTable() {
@@ -65,6 +61,7 @@ export default function PositionsTable() {
           groups[key].total += p.valueUSD || 0;
         }
       }
+
       return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     } else {
       const groups: Record<string, { title: string; total: number; rows: typeof data }> = {};
@@ -78,6 +75,7 @@ export default function PositionsTable() {
           groups[key].total += p.valueUSD || 0;
         }
       }
+
       return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     }
   }, [data, groupMode, labelFor, excludedPositions, generateId]);
