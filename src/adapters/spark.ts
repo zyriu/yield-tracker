@@ -1,15 +1,14 @@
-// adapters/spark/fetchSparkPositions.ts
-import { formatUnits } from "viem";
+import { Abi, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
 
-import { multicall } from "@/lib/multicall";
-import { mainnetClient } from "@/lib/viem";
-import { ERC20_ABI, SPK_FARM, SPK_TOKEN, STAKING_REWARDS_ABI, USDS_TOKEN } from "@/lib/web3";
+import { abis, contracts } from "@/lib/web3";
+import { multicall } from "@/lib/web3/multicall";
+import { mainnetClient } from "@/lib/web3/viem";
 
-const computeYield = ({ address, pricesUSD }) => {
-  return { apr7d: 0, apy: 0 };
-};
+const erc20 = abis.erc20 as Abi;
+const rewards = abis.ethereum.spark.rewards as Abi;
+const { farm, spk, USDS } = contracts.ethereum.spark;
 
 export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }) => {
   const out: Position[] = [];
@@ -20,12 +19,12 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
 
     // --- Current snapshot (1 multicall) ---
     const [rawDeposit, rawEarned, usdsDecimals, usdsSymbol, spkDecimals, spkSymbol] = (await multicall(mainnetClient, [
-      { address: SPK_FARM, abi: STAKING_REWARDS_ABI, functionName: "balanceOf", args: [user], blockNumber: blockNow },
-      { address: SPK_FARM, abi: STAKING_REWARDS_ABI, functionName: "earned", args: [user], blockNumber: blockNow },
-      { address: USDS_TOKEN, abi: ERC20_ABI, functionName: "decimals", blockNumber: blockNow },
-      { address: USDS_TOKEN, abi: ERC20_ABI, functionName: "symbol", blockNumber: blockNow },
-      { address: SPK_TOKEN, abi: ERC20_ABI, functionName: "decimals", blockNumber: blockNow },
-      { address: SPK_TOKEN, abi: ERC20_ABI, functionName: "symbol", blockNumber: blockNow },
+      { address: farm as `0x${string}`, abi: rewards, functionName: "balanceOf", args: [user], blockNumber: blockNow },
+      { address: farm as `0x${string}`, abi: rewards, functionName: "earned", args: [user], blockNumber: blockNow },
+      { address: USDS as `0x${string}`, abi: erc20, functionName: "decimals", blockNumber: blockNow },
+      { address: USDS as `0x${string}`, abi: erc20, functionName: "symbol", blockNumber: blockNow },
+      { address: spk as `0x${string}`, abi: erc20, functionName: "decimals", blockNumber: blockNow },
+      { address: spk as `0x${string}`, abi: erc20, functionName: "symbol", blockNumber: blockNow },
     ])) as [bigint | null, bigint | null, number | null, string | null, number | null, string | null];
 
     if (!rawDeposit || rawDeposit === 0n) return out;
@@ -41,8 +40,6 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
     const claimable = currentEarnedFloat > 0 ? `${currentEarnedFloat.toFixed(2)} ${spkSymbol || "SPK"}` : undefined;
     const claimableRewardsValueUSD = currentEarnedFloat > 0 && spkPrice > 0 ? currentEarnedFloat * spkPrice : undefined;
 
-    const { apr7d, apy } = computeYield({ address, pricesUSD });
-
     out.push({
       protocol: "spark",
       chain: "ethereum",
@@ -51,8 +48,8 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
       valueUSD,
       claimableRewards: claimable,
       claimableRewardsValueUSD,
-      apr7d,
-      apy,
+      apr7d: 0,
+      apy: 0,
       detailsUrl: "https://app.spark.fi/farms",
     });
   } catch {

@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
-import { getIcons } from "@/lib/icons";
-import { getPricesUSD } from "@/lib/prices";
+import { getIcons } from "@/lib/coingecko/icons";
+import { getPricesUSD } from "@/lib/coingecko/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD, shortAddress } from "@/utils/format";

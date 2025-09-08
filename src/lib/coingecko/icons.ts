@@ -5,7 +5,7 @@ const IDS = "arbitrum,ethereum,hyperliquid";
 
 export const getIcons = () => {
   const { data: icons } = useQuery({
-    queryKey: ["icons"],
+    queryKey: ["coingecko", "icons"],
     queryFn: async () => {
       const { data } = await axios.get(
         `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${IDS}&per_page=250&page=1`

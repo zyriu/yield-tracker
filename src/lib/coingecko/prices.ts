@@ -15,7 +15,7 @@ export type Prices = {
 
 export const getPricesUSD = () => {
   const { data: pricesUSD, isLoading } = useQuery({
-    queryKey: ["prices"],
+    queryKey: ["coingecko", "prices"],
     queryFn: async () => {
       try {
         const url = `https://api.coingecko.com/api/v3/simple/price?ids=${IDS}&vs_currencies=usd`;

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
 import { adapters, fetchPositionsForAddress } from "@/adapters";
-import { getPricesUSD } from "@/lib/prices";
+import { getPricesUSD } from "@/lib/coingecko/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD } from "@/utils/format";

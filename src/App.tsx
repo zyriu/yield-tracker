@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+
 import SettingsDrawer from "@/components/SettingsDrawer";
 import Sidebar from "@/components/Sidebar";
 import TopNav from "@/components/TopNav";

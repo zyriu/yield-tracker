@@ -1,14 +1,17 @@
-import { formatUnits } from "viem";
+import { Abi, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
 
-import { multicall } from "@/lib/multicall";
-import { mainnetClient } from "@/lib/viem";
-import { ETHENA_ABI, SUSDE } from "@/lib/web3";
+import { abis, contracts } from "@/lib/web3";
+import { multicall } from "@/lib/web3/multicall";
+import { mainnetClient } from "@/lib/web3/viem";
 
 // ≈12s blocks
 const BLOCKS_7D = 50_400n;
 const BLOCKS_30D = 216_000n;
+
+const staking = abis.ethereum.ethena.staking as Abi;
+const sUSDe = contracts.ethereum.ethena.sUSDe as `0x${string}`;
 
 export const fetchEthenaPositions: FetchPositions = async ({ address, pricesUSD }) => {
   const out: Position[] = [];
@@ -16,10 +19,9 @@ export const fetchEthenaPositions: FetchPositions = async ({ address, pricesUSD 
   try {
     const blockNumber = await mainnetClient.getBlockNumber();
 
-    // Batch the first two calls: sUSDe balance and decimals.
     const [shares, decimals] = (await multicall(mainnetClient, [
-      { address: SUSDE, abi: ETHENA_ABI, functionName: "balanceOf", args: [address as `0x${string}`], blockNumber },
-      { address: SUSDE, abi: ETHENA_ABI, functionName: "decimals", blockNumber },
+      { address: sUSDe, abi: staking, functionName: "balanceOf", args: [address as `0x${string}`], blockNumber },
+      { address: sUSDe, abi: staking, functionName: "decimals", blockNumber },
     ])) as [bigint, number];
 
     // If no shares, return empty array
@@ -34,10 +36,10 @@ export const fetchEthenaPositions: FetchPositions = async ({ address, pricesUSD 
     let apy: number | undefined;
 
     const [assetsNow, oneShareAssetsNow, ppsPast7Raw, ppsPast30Raw] = (await multicall(mainnetClient, [
-      { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [shares], blockNumber },
-      { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n], blockNumber },
-      { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n], blockNumber: past7 },
-      { address: SUSDE, abi: ETHENA_ABI, functionName: "convertToAssets", args: [1n], blockNumber: past30 },
+      { address: sUSDe, abi: staking, functionName: "convertToAssets", args: [shares], blockNumber },
+      { address: sUSDe, abi: staking, functionName: "convertToAssets", args: [1n], blockNumber },
+      { address: sUSDe, abi: staking, functionName: "convertToAssets", args: [1n], blockNumber: past7 },
+      { address: sUSDe, abi: staking, functionName: "convertToAssets", args: [1n], blockNumber: past30 },
     ])) as [bigint, bigint, bigint, bigint];
 
     const ppsNow = Number(formatUnits(oneShareAssetsNow, decimals));

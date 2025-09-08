@@ -5,7 +5,7 @@ import { fetchSparkPositions } from "./spark";
 
 import type { FetchPositions, Protocol } from "./types";
 
-import { Prices } from "@/lib/prices";
+import { Prices } from "@/lib/coingecko/prices";
 
 export const adapters: Record<Protocol, FetchPositions> = {
   pendle: fetchPendlePositions,

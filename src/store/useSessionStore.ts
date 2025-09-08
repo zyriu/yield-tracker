@@ -10,14 +10,14 @@ type TrackedAddress = {
 
 type SessionState = {
   addresses: TrackedAddress[];
-  addAddress: (address: string, label?: string) => void;
-  removeAddress: (id: string) => void;
-  setAddressLabel: (id: string, label?: string) => void;
+  addAddress: (_address: string, _label?: string) => void;
+  removeAddress: (_id: string) => void;
+  setAddressLabel: (_id: string, _label?: string) => void;
 
   mainnetRpcUrl: string;
-  setMainnetRPC: (url: string) => void;
+  setMainnetRPC: (_url: string) => void;
   arbitrumRpcUrl: string;
-  setArbitrumRPC: (url: string) => void;
+  setArbitrumRPC: (_url: string) => void;
 };
 
 function idFor(addr: string) {
@@ -32,9 +32,11 @@ export const useSessionStore = create<SessionState>()(
         if (!isAddress(address as `0x${string}`)) {
           throw new Error("Invalid EVM address");
         }
+
         const id = idFor(address);
         const exists = get().addresses.some((a) => a.id === id);
         if (exists) return;
+
         set((s) => ({
           addresses: [...s.addresses, { id, address, label }],
         }));
@@ -47,7 +49,6 @@ export const useSessionStore = create<SessionState>()(
           addresses: s.addresses.map((a) => (a.id === id ? { ...a, label: label || undefined } : a)),
         }));
       },
-
       mainnetRpcUrl: "",
       setMainnetRPC: (url) => set({ mainnetRpcUrl: url }),
       arbitrumRpcUrl: "",

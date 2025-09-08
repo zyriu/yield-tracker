@@ -13,8 +13,8 @@ type UIState = {
   openSettings: () => void;
   closeSettings: () => void;
   toggleTheme: () => void;
-  setGroupMode: (m: GroupMode) => void;
-  togglePositionExcluded: (id: string) => void;
+  setGroupMode: (_m: GroupMode) => void;
+  togglePositionExcluded: (_id: string) => void;
 };
 
 export const useUIStore = create<UIState>()(

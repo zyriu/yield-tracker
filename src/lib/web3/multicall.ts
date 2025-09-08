@@ -25,6 +25,7 @@ export async function multicall<T extends MulticallItem>(
       })),
       allowFailure: true,
     });
+
     return response.map((res) => (res.status === "success" ? res.result : null));
   } catch (err) {
     pushToast(`multicall failed: ${err}`);

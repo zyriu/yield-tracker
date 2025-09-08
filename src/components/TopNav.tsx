@@ -4,7 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 
 import { Button } from "./ui/button";
 
-import { arbitrumClient, mainnetClient } from "@/lib/viem";
+import { arbitrumClient, mainnetClient } from "@/lib/web3/viem";
 import { useUIStore } from "@/store/useUIStore";
 
 export default function TopNav() {
@@ -12,7 +12,6 @@ export default function TopNav() {
   const openSettings = useUIStore((s) => s.openSettings);
   const location = useLocation();
 
-  // Block numbers for Ethereum, Arbitrum and Hyperliquid
   const { data: ethBlock } = useQuery({
     queryKey: ["blockNumber", "ethereum"],
     queryFn: async () => {
@@ -42,21 +41,21 @@ export default function TopNav() {
         </div>
         <div className="flex justify-center items-center">
           <nav className="flex gap-4">
-            <Link 
-              to="/" 
+            <Link
+              to="/"
               className={`px-4 py-2 rounded-md transition-colors ${
-                location.pathname === "/" 
-                  ? "bg-primary text-primary-foreground" 
+                location.pathname === "/"
+                  ? "bg-primary text-primary-foreground"
                   : "text-text-muted hover:text-text hover:bg-white/5"
               }`}
             >
               Dashboard
             </Link>
-            <Link 
-              to="/yield" 
+            <Link
+              to="/yield"
               className={`px-4 py-2 rounded-md transition-colors ${
-                location.pathname === "/yield" 
-                  ? "bg-primary text-primary-foreground" 
+                location.pathname === "/yield"
+                  ? "bg-primary text-primary-foreground"
                   : "text-text-muted hover:text-text hover:bg-white/5"
               }`}
             >
