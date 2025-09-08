@@ -63,5 +63,6 @@ export const CHAIN_MAP: Record<number, string | "skip"> = {
 
 // Common error handler for adapters
 export function handleAdapterError(protocol: string, error: any): void {
+  // eslint-disable-next-line no-console
   console.warn(`Error in ${protocol} adapter:`, error);
 }

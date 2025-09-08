@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { adapters } from "@/adapters";
 import type { Protocol } from "@/adapters/types";
+
+import { adapters } from "@/adapters";
 import { getPricesUSD } from "@/lib/coingecko/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 

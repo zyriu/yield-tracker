@@ -17,4 +17,4 @@ export interface Position {
   claimableRewardsValueUSD?: number;
 }
 
-export type FetchPositions = (_args: { address: string; pricesUSD: Prices }) => Promise<Position[]>;
+export type FetchPositions = (args: { address: string; pricesUSD: Prices }) => Promise<Position[]>;

@@ -1,7 +1,8 @@
 import { Abi, formatUnits } from "viem";
 
-import type { FetchPositions, Position } from "./types";
 import { handleAdapterError } from "./utils";
+
+import type { FetchPositions, Position } from "./types";
 
 import { abis, contracts } from "@/lib/web3";
 import { multicall } from "@/lib/web3/multicall";

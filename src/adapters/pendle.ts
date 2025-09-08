@@ -1,7 +1,8 @@
 import { HttpStatusCode } from "axios";
 
-import type { FetchPositions, Position } from "./types";
 import { toNumber, toBigIntOrZero, CHAIN_MAP, makeHttpRequest, createCache, handleAdapterError } from "./utils";
+
+import type { FetchPositions, Position } from "./types";
 
 // Dashboard positions endpoint
 const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
