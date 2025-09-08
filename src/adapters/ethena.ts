@@ -1,6 +1,7 @@
 import { Abi, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
+import { handleAdapterError } from "./utils";
 
 import { abis, contracts } from "@/lib/web3";
 import { multicall } from "@/lib/web3/multicall";
@@ -73,8 +74,8 @@ export const fetchEthenaPositions: FetchPositions = async ({ address, pricesUSD 
       valueUSD,
       detailsUrl: "https://app.ethena.fi/",
     });
-  } catch {
-    /* empty */
+  } catch (error) {
+    handleAdapterError("ethena", error);
   }
 
   return out;

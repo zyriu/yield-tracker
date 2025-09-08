@@ -1,22 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useMemo } from "react";
 
 import EmptyState from "./EmptyState";
-import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
-import { adapters, fetchPositionsForAddress } from "@/adapters";
+import { useAllProtocolPositions } from "@/hooks/useProtocolPositions";
 import { getIcons } from "@/lib/coingecko/icons";
-import { getPricesUSD } from "@/lib/coingecko/prices";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD, shortAddress } from "@/utils/format";
 
 export default function PositionsTable() {
   const addressItems = useSessionStore((s) => s.addresses);
-  const addresses = addressItems.map((a) => a.address);
 
   const groupMode = useUIStore((s) => s.groupMode);
   const setGroupMode = useUIStore((s) => s.setGroupMode);
@@ -29,18 +25,8 @@ export default function PositionsTable() {
   const generateId = (p: any): string =>
     [p.protocol, p.chain, p.address?.toLowerCase?.(), p.asset, p.marketProtocol ?? ""].join(":");
 
-  const { pricesUSD, isLoading: pricesLoading } = getPricesUSD();
-
-  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["positions", addresses],
-    queryFn: async () => {
-      const protocols = Object.keys(adapters);
-      const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols, pricesUSD!)));
-      return res.flat();
-    },
-    enabled: addresses.length > 0 && !pricesLoading,
-    staleTime: 60_000,
-  });
+  // Use the new concurrent fetching hook
+  const { data, isLoading, isError, error, protocolStatus, isFetching } = useAllProtocolPositions();
 
   const icons = getIcons();
 
@@ -50,25 +36,47 @@ export default function PositionsTable() {
   );
   const displayOwner = (addr: string) => labelFor[addr.toLowerCase()] || shortAddress(addr);
 
-  // Group positions either by protocol or by wallet address
+  // Group positions either by protocol or by wallet address, including loading states
   const grouped = useMemo(() => {
-    if (!data) return [];
-
+    const allProtocols = Object.keys(protocolStatus);
+    
     if (groupMode === "protocol") {
-      const groups: Record<string, { title: string; total: number; rows: typeof data }> = {};
-      for (const p of data) {
+      // Start with all protocols to show loading states
+      const groups: Record<string, { 
+        title: string; 
+        total: number; 
+        rows: typeof data; 
+        isLoading: boolean;
+        isFetching: boolean;
+      }> = {};
+      
+      // Initialize with all protocols
+      for (const protocol of allProtocols) {
+        groups[protocol] = {
+          title: protocol,
+          total: 0,
+          rows: [],
+          isLoading: protocolStatus[protocol].isLoading,
+          isFetching: protocolStatus[protocol].isFetching,
+        };
+      }
+      
+      // Add actual data
+      for (const p of data || []) {
         const key = p.protocol;
-        if (!groups[key]) groups[key] = { title: p.protocol, total: 0, rows: [] as any };
-        groups[key].rows.push(p);
-        const posId = generateId(p);
-        if (!excludedPositions?.includes(posId)) {
-          groups[key].total += p.valueUSD || 0;
+        if (groups[key]) {
+          groups[key].rows.push(p);
+          const posId = generateId(p);
+          if (!excludedPositions?.includes(posId)) {
+            groups[key].total += p.valueUSD || 0;
+          }
         }
       }
+      
       return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     } else {
       const groups: Record<string, { title: string; total: number; rows: typeof data }> = {};
-      for (const p of data) {
+      for (const p of data || []) {
         const title = labelFor[p.address.toLowerCase()] || shortAddress(p.address);
         const key = p.address.toLowerCase();
         if (!groups[key]) groups[key] = { title, total: 0, rows: [] as any };
@@ -80,7 +88,7 @@ export default function PositionsTable() {
       }
       return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [data, groupMode, labelFor, excludedPositions, generateId]);
+  }, [data, groupMode, labelFor, excludedPositions, generateId, protocolStatus]);
 
   // Column widths: include toggle, owner/protocol, asset icon, source, chain, APR, APY, amount, value, claimable
   const Cols = () => (
@@ -101,7 +109,12 @@ export default function PositionsTable() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between w-full gap-3">
-          <CardTitle>Positions</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Positions</CardTitle>
+            {!isLoading && isFetching && (
+              <RefreshCw className="h-4 w-4 animate-spin text-text-muted" />
+            )}
+          </div>
           <div className="flex items-center gap-3 flex-nowrap whitespace-nowrap">
             <span className="text-xs text-text-muted">Group by</span>
             <Select
@@ -112,9 +125,6 @@ export default function PositionsTable() {
               <option value="protocol">Protocol</option>
               <option value="wallet">Wallet</option>
             </Select>
-            <Button onClick={() => refetch()} disabled={isFetching} className="px-6">
-              {isFetching ? "Refreshing…" : "Refresh"}
-            </Button>
           </div>
         </div>
       </CardHeader>
@@ -128,15 +138,23 @@ export default function PositionsTable() {
           </div>
         )}
         {isError && <p className="text-sm text-red-400">{(error as Error)?.message ?? "Error"}</p>}
-        {!isLoading && !isError && (!data || data.length === 0) && (
+        {!isLoading && !isError && grouped.length === 0 && (
           <EmptyState title="No positions found" hint="Add an address to start tracking." />
         )}
-        {!isLoading && data && data.length > 0 && (
+        {!isLoading && (
           <div className="space-y-5">
             {grouped.map((g, gi) => (
               <div key={gi} className="rounded-lg border border-white/10 bg-white/5">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <div className="text-sm font-semibold capitalize">{g.title}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-semibold capitalize">{g.title}</div>
+                    {groupMode === "protocol" && "isLoading" in g && g.isLoading && (
+                      <div className="h-3 w-3 rounded-full animate-pulse bg-white/20" />
+                    )}
+                    {groupMode === "protocol" && "isFetching" in g && !g.isLoading && g.isFetching && (
+                      <RefreshCw className="h-3 w-3 animate-spin text-text-muted" />
+                    )}
+                  </div>
                   <div className="text-sm font-medium text-white">
                     Total: <span className="font-semibold">{formatUSD(g.total)}</span>
                   </div>
@@ -167,6 +185,25 @@ export default function PositionsTable() {
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Show skeleton rows for loading protocols */}
+                      {groupMode === "protocol" && "isLoading" in g && g.isLoading && g.rows.length === 0 && (
+                        <>
+                          {[1, 2].map((i) => (
+                            <tr key={`skeleton-${i}`} className="border-t border-white/10 animate-pulse">
+                              <td className="py-2 px-3"><div className="h-4 w-4 bg-white/10 rounded" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-20 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-16 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-12 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-6 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-12 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-12 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-20 bg-white/10 rounded mx-auto" /></td>
+                              <td className="py-2 px-3"><div className="h-4 w-16 bg-white/10 rounded ml-auto" /></td>
+                            </tr>
+                          ))}
+                        </>
+                      )}
+                      {/* Show actual data */}
                       {g.rows.map((p, i) => {
                         const posId = generateId(p);
                         const isExcluded = excludedPositions?.includes(posId);

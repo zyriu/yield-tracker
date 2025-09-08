@@ -1,6 +1,7 @@
 import { Abi, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
+import { handleAdapterError } from "./utils";
 
 import { abis, contracts } from "@/lib/web3";
 import { multicall } from "@/lib/web3/multicall";
@@ -52,8 +53,8 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
       apy: 0,
       detailsUrl: "https://app.spark.fi/farms",
     });
-  } catch {
-    /* swallow */
+  } catch (error) {
+    handleAdapterError("spark", error);
   }
 
   return out;

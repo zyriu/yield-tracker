@@ -1,33 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select } from "./ui/select";
 
-import { adapters, fetchPositionsForAddress } from "@/adapters";
+import { useAllProtocolPositions } from "@/hooks/useProtocolPositions";
 import { getPricesUSD } from "@/lib/coingecko/prices";
-import { useSessionStore } from "@/store/useSessionStore";
 import { useUIStore } from "@/store/useUIStore";
 import { formatPct, formatUSD } from "@/utils/format";
 
 export default function PortfolioSummaryCard() {
-  // Gather all tracked addresses and RPC URL
-  const addresses = useSessionStore((s) => s.addresses.map((a) => a.address));
-
   const { pricesUSD, isLoading: pricesLoading } = getPricesUSD();
-
-  // Query all positions for the tracked addresses
-  const { data: positions, isLoading: positionsLoading } = useQuery({
-    queryKey: ["portfolio-summary", addresses],
-    queryFn: async () => {
-      const protocols = Object.keys(adapters);
-      const res = await Promise.all(addresses.map((addr) => fetchPositionsForAddress(addr, protocols, pricesUSD!)));
-      return res.flat();
-    },
-    enabled: addresses.length > 0 && !pricesLoading,
-    refetchInterval: 1000 * 60 * 5,
-    staleTime: 1_000 * 60 * 5,
-  });
+  
+  // Use the new concurrent fetching hook
+  const { data: positions, isLoading: positionsLoading, isFetching } = useAllProtocolPositions();
 
   // State for selected denomination (usd, btc, eth or sol)
   const [currency, setCurrency] = useState<"usd" | "btc" | "eth" | "sol">("usd");
@@ -100,7 +86,12 @@ export default function PortfolioSummaryCard() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Portfolio Summary</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Portfolio Summary</CardTitle>
+            {!isLoading && isFetching && (
+              <RefreshCw className="h-4 w-4 animate-spin text-text-muted" />
+            )}
+          </div>
           <div className="flex items-center gap-3 flex-nowrap whitespace-nowrap">
             <span className="text-xs text-text-muted">Denominator</span>
             <Select value={currency} onChange={(e) => setCurrency(e.target.value as "usd" | "btc" | "eth" | "sol")}>
