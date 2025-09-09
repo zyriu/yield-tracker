@@ -1,12 +1,16 @@
 import { Abi, Address, formatUnits } from "viem";
 
-import { updateUserDepositData } from "./events";
+import { updateUserDepositData, queryUserEventsForPeriod, calculateAPR } from "./events";
 
 import type { FetchPositions, Position } from "@/adapters/types";
 
 import { abis, contracts } from "@/lib/web3";
 import { multicall } from "@/lib/web3/multicall";
 import { mainnetClient } from "@/lib/web3/viem";
+
+// Ethereum block time is approximately 12 seconds
+const SECONDS_PER_BLOCK = 12;
+const BLOCKS_PER_DAY = Math.floor((24 * 60 * 60) / SECONDS_PER_BLOCK); // ~7200 blocks per day
 
 const erc20 = abis.erc20 as Abi;
 const rewards = abis.ethereum.spark.rewards as Abi;
@@ -21,7 +25,7 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
 
     // Update deposit tracking in background (async)
     updateUserDepositData(user).catch((error) => {
-      console.warn("Failed to update Spark deposit data:", error);
+      // Silently ignore errors in background updates
     });
 
     // --- Current snapshot (1 multicall) ---
@@ -47,6 +51,26 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
     const claimable = currentEarnedFloat > 0 ? `${currentEarnedFloat.toFixed(2)} ${spkSymbol || "SPK"}` : undefined;
     const claimableRewardsValueUSD = currentEarnedFloat > 0 && spkPrice > 0 ? currentEarnedFloat * spkPrice : undefined;
 
+    // Calculate APR for 7 days and 30 days
+    let apr7d = 0;
+    let apr30d = 0;
+
+    try {
+      // Query events for 30 days and calculate APR
+      const { events: events30d, currentPosition } = await queryUserEventsForPeriod(user, 30);
+      const totalBlocks30d = 30 * BLOCKS_PER_DAY;
+      apr30d = calculateAPR(events30d, currentPosition, totalBlocks30d);
+
+      // For 7-day APR, filter events to last 7 days
+      const currentBlock = await mainnetClient.getBlockNumber();
+      const blocks7dAgo = currentBlock - BigInt(7 * BLOCKS_PER_DAY);
+      const events7d = events30d.filter(event => event.blockNumber >= blocks7dAgo);
+      const totalBlocks7d = 7 * BLOCKS_PER_DAY;
+      apr7d = calculateAPR(events7d, currentPosition, totalBlocks7d);
+    } catch (error) {
+      // Silently ignore APR calculation errors
+    }
+
     out.push({
       protocol: "spark",
       chain: "ethereum",
@@ -55,8 +79,8 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
       valueUSD,
       claimableRewards: claimable,
       claimableRewardsValueUSD,
-      apr7d: 0,
-      lifetimeAPR: 0,
+      apr7d,
+      lifetimeAPR: apr30d, // Use 30-day APR instead of lifetime
       detailsUrl: "https://app.spark.fi/farms",
     });
   } catch {
