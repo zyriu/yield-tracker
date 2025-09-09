@@ -204,8 +204,31 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
     const rewardTokens: string[] = [];
     let totalValueUSD = 0;
 
+    // Helper function to safely process a reward entry
+    function processRewardEntry(reward: any): void {
+      if (!reward || typeof reward !== 'object') return;
+
+      const amount = toNumber(reward.amount || reward.balance || reward.claimable);
+      const tokenSymbol = reward.token || reward.symbol || reward.tokenSymbol;
+      
+      if (!amount || amount <= 0 || !tokenSymbol) return;
+
+      try {
+        const formattedAmount = amount.toFixed(4);
+        rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
+        
+        const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
+        if (priceKey && pricesUSD[priceKey] > 0) {
+          totalValueUSD += amount * pricesUSD[priceKey];
+        }
+      } catch (error) {
+        // Silently ignore formatting errors for individual rewards
+        console.warn(`Error processing reward for ${tokenSymbol}:`, error);
+      }
+    }
+
     // First, try to get rewards from the leg data (more likely to be available)
-    if (legData) {
+    if (legData && typeof legData === 'object') {
       const possibleRewardFields = [
         'claimableRewards',
         'pendingRewards', 
@@ -216,71 +239,41 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
 
       for (const field of possibleRewardFields) {
         const rewardData = legData[field];
-        if (rewardData) {
-          // Handle different reward data structures
+        if (!rewardData) continue;
+
+        try {
           if (Array.isArray(rewardData)) {
-            for (const reward of rewardData) {
-              const amount = toNumber(reward?.amount || reward?.balance);
-              const tokenSymbol = reward?.token || reward?.symbol;
-              
-              if (amount && amount > 0 && tokenSymbol) {
-                const formattedAmount = amount.toFixed(4);
-                rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
-                
-                const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
-                if (priceKey && pricesUSD[priceKey] > 0) {
-                  totalValueUSD += amount * pricesUSD[priceKey];
-                }
-              }
-            }
-          } else if (typeof rewardData === 'object' && rewardData !== null) {
-            // Handle single reward object
-            const amount = toNumber(rewardData.amount || rewardData.balance);
-            const tokenSymbol = rewardData.token || rewardData.symbol;
-            
-            if (amount && amount > 0 && tokenSymbol) {
-              const formattedAmount = amount.toFixed(4);
-              rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
-              
-              const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
-              if (priceKey && pricesUSD[priceKey] > 0) {
-                totalValueUSD += amount * pricesUSD[priceKey];
-              }
-            }
+            rewardData.forEach(processRewardEntry);
+          } else if (typeof rewardData === 'object') {
+            processRewardEntry(rewardData);
           }
+        } catch (error) {
+          console.warn(`Error processing rewards field ${field}:`, error);
         }
       }
     }
 
     // If no rewards found in leg data, try chainRewards data
     if (rewardTokens.length === 0 && chainRewards?.rewards && Array.isArray(chainRewards.rewards)) {
-      // Find rewards for this specific market
-      const marketRewards = chainRewards.rewards.filter((reward: any) => {
-        const rewardMarketId = reward?.marketId || reward?.market;
-        return rewardMarketId === marketId;
-      });
+      try {
+        // Find rewards for this specific market
+        const marketRewards = chainRewards.rewards.filter((reward: any) => {
+          if (!reward || typeof reward !== 'object') return false;
+          const rewardMarketId = reward.marketId || reward.market;
+          return rewardMarketId === marketId;
+        });
 
-      for (const reward of marketRewards) {
-        // Check if this reward applies to the current position type
-        const rewardType = reward?.type?.toLowerCase() || "";
-        if (rewardType && !rewardType.includes(positionKind)) {
-          continue; // Skip rewards that don't apply to this position type
+        for (const reward of marketRewards) {
+          // Check if this reward applies to the current position type
+          const rewardType = reward?.type?.toLowerCase();
+          if (rewardType && !rewardType.includes(positionKind)) {
+            continue; // Skip rewards that don't apply to this position type
+          }
+
+          processRewardEntry(reward);
         }
-
-        const amount = toNumber(reward?.amount || reward?.claimable);
-        const tokenSymbol = reward?.tokenSymbol || reward?.symbol;
-
-        if (!amount || amount <= 0 || !tokenSymbol) continue;
-
-        // Format the reward amount
-        const formattedAmount = amount.toFixed(4);
-        rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
-
-        // Calculate USD value if price is available
-        const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
-        if (priceKey && pricesUSD[priceKey] > 0) {
-          totalValueUSD += amount * pricesUSD[priceKey];
-        }
+      } catch (error) {
+        console.warn('Error processing chain rewards data:', error);
       }
     }
 
