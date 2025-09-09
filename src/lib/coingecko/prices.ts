@@ -3,7 +3,7 @@ import axios from "axios";
 
 import { pushToast } from "@/components/ui/toast";
 
-const IDS = "ethena-usde,bitcoin,ethereum,solana,spark";
+const IDS = "ethena-usde,bitcoin,ethereum,solana,spark,pendle";
 
 export type Prices = {
   btc: number;
@@ -11,6 +11,7 @@ export type Prices = {
   sol: number;
   spk: number;
   usde: number;
+  pendle: number;
 };
 
 export const getPricesUSD = () => {
@@ -27,11 +28,12 @@ export const getPricesUSD = () => {
           eth: Number(data?.ethereum?.usd) || 0,
           sol: Number(data?.solana?.usd) || 0,
           spk: Number(data?.spark?.usd) || 0,
+          pendle: Number(data?.pendle?.usd) || 0,
         } as Prices;
       } catch (err) {
         pushToast(`error fetching prices: ${err}`);
 
-        return { usde: 0, btc: 0, eth: 0, sol: 0, spk: 0 } as Prices;
+        return { usde: 0, btc: 0, eth: 0, sol: 0, spk: 0, pendle: 0 } as Prices;
       }
     },
     refetchInterval: 1000 * 60 * 5,

@@ -1,6 +1,7 @@
 import axios, { HttpStatusCode } from "axios";
 
 import type { FetchPositions, Position } from "./types";
+import type { Prices } from "@/lib/coingecko/prices";
 
 // Dashboard positions endpoint
 const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
@@ -10,6 +11,9 @@ const PENDLE_MARKET_DATA_BASE = "https://api-v2.pendle.finance/core/v2";
 
 // Base for market details (returns protocol and other info)
 const PENDLE_MARKET_DETAILS_BASE = "https://api-v2.pendle.finance/core/v1";
+
+// Base for rewards/claims data
+const PENDLE_REWARDS_BASE = "https://api-v2.pendle.finance/core/v1";
 
 type AnyObj = Record<string, any>;
 
@@ -68,7 +72,7 @@ function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
  * Since Pendle’s API returns a single APY figure (implied/aggregated), we treat that
  * value as both the 7‑day APR and the APY.
  */
-export const fetchPendlePositions: FetchPositions = async ({ address }) => {
+export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD }) => {
   let json: AnyObj;
   try {
     const { data, status } = await axios.get(`${PENDLE_POSITIONS_API}/${address.toLowerCase()}`, {
@@ -90,6 +94,38 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   // Per call caches to avoid redundant network requests
   const marketDataCache: Record<string, any> = {};
   const marketDetailsCache: Record<string, any> = {};
+  const rewardsCache: Record<string, any> = {};
+
+  // Fetch claimable rewards for a user on a specific chain
+  async function getClaimableRewards(chainId: number, userAddress: string): Promise<any | undefined> {
+    const cacheKey = `${chainId}-${userAddress}`;
+    if (cacheKey in rewardsCache) return rewardsCache[cacheKey];
+
+    // Try multiple possible endpoints for rewards
+    const possibleEndpoints = [
+      `${PENDLE_REWARDS_BASE}/${chainId}/users/${userAddress.toLowerCase()}/rewards`,
+      `${PENDLE_REWARDS_BASE}/${chainId}/users/${userAddress.toLowerCase()}/claimable`,
+      `${PENDLE_REWARDS_BASE}/${chainId}/rewards/${userAddress.toLowerCase()}`,
+    ];
+
+    for (const endpoint of possibleEndpoints) {
+      try {
+        const { data, status } = await axios.get(endpoint, {
+          headers: { accept: "application/json" },
+        });
+
+        if (status === HttpStatusCode.Ok && data) {
+          rewardsCache[cacheKey] = data;
+          return data;
+        }
+      } catch {
+        // Continue to next endpoint
+      }
+    }
+
+    rewardsCache[cacheKey] = undefined;
+    return undefined;
+  }
 
   // Fetch APY metrics for a given market (impliedApy, ytFloatingApy, aggregatedApy)
   async function getMarketData(marketId: string): Promise<any | undefined> {
@@ -144,6 +180,120 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     return undefined;
   }
 
+  // Calculate claimable rewards for a specific position
+  function calculateClaimableRewards(
+    chainRewards: any,
+    marketId: string,
+    positionKind: "pt" | "yt" | "lp",
+    pricesUSD: Prices,
+    legData?: any
+  ): { claimableRewards?: string; claimableRewardsValueUSD?: number } {
+    
+    // Token symbol to price key mapping
+    const tokenPriceMapping: Record<string, keyof Prices> = {
+      'PENDLE': 'pendle',
+      'ETH': 'eth',
+      'WETH': 'eth',
+      'BTC': 'btc',
+      'WBTC': 'btc',
+      'SOL': 'sol',
+      'SPK': 'spk',
+      'USDE': 'usde'
+    };
+
+    const rewardTokens: string[] = [];
+    let totalValueUSD = 0;
+
+    // First, try to get rewards from the leg data (more likely to be available)
+    if (legData) {
+      const possibleRewardFields = [
+        'claimableRewards',
+        'pendingRewards', 
+        'rewards',
+        'claimable',
+        'earned'
+      ];
+
+      for (const field of possibleRewardFields) {
+        const rewardData = legData[field];
+        if (rewardData) {
+          // Handle different reward data structures
+          if (Array.isArray(rewardData)) {
+            for (const reward of rewardData) {
+              const amount = toNumber(reward?.amount || reward?.balance);
+              const tokenSymbol = reward?.token || reward?.symbol;
+              
+              if (amount && amount > 0 && tokenSymbol) {
+                const formattedAmount = amount.toFixed(4);
+                rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
+                
+                const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
+                if (priceKey && pricesUSD[priceKey] > 0) {
+                  totalValueUSD += amount * pricesUSD[priceKey];
+                }
+              }
+            }
+          } else if (typeof rewardData === 'object' && rewardData !== null) {
+            // Handle single reward object
+            const amount = toNumber(rewardData.amount || rewardData.balance);
+            const tokenSymbol = rewardData.token || rewardData.symbol;
+            
+            if (amount && amount > 0 && tokenSymbol) {
+              const formattedAmount = amount.toFixed(4);
+              rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
+              
+              const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
+              if (priceKey && pricesUSD[priceKey] > 0) {
+                totalValueUSD += amount * pricesUSD[priceKey];
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // If no rewards found in leg data, try chainRewards data
+    if (rewardTokens.length === 0 && chainRewards?.rewards && Array.isArray(chainRewards.rewards)) {
+      // Find rewards for this specific market
+      const marketRewards = chainRewards.rewards.filter((reward: any) => {
+        const rewardMarketId = reward?.marketId || reward?.market;
+        return rewardMarketId === marketId;
+      });
+
+      for (const reward of marketRewards) {
+        // Check if this reward applies to the current position type
+        const rewardType = reward?.type?.toLowerCase() || "";
+        if (rewardType && !rewardType.includes(positionKind)) {
+          continue; // Skip rewards that don't apply to this position type
+        }
+
+        const amount = toNumber(reward?.amount || reward?.claimable);
+        const tokenSymbol = reward?.tokenSymbol || reward?.symbol;
+
+        if (!amount || amount <= 0 || !tokenSymbol) continue;
+
+        // Format the reward amount
+        const formattedAmount = amount.toFixed(4);
+        rewardTokens.push(`${formattedAmount} ${tokenSymbol}`);
+
+        // Calculate USD value if price is available
+        const priceKey = tokenPriceMapping[tokenSymbol.toUpperCase()];
+        if (priceKey && pricesUSD[priceKey] > 0) {
+          totalValueUSD += amount * pricesUSD[priceKey];
+        }
+      }
+    }
+
+    if (rewardTokens.length === 0) {
+      return { claimableRewards: undefined, claimableRewardsValueUSD: undefined };
+    }
+
+    const claimableRewards = rewardTokens.join(" + ");
+    const claimableRewardsValueUSD = totalValueUSD > 0 ? totalValueUSD : undefined;
+
+    return { claimableRewards, claimableRewardsValueUSD };
+  }
+
   // Load active markets for a given chain and populate marketMetaCache
   async function loadMarketMeta(chainId: number) {
     if (activeMarketsFetched[chainId]) return;
@@ -181,6 +331,9 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     if (typeof chainId === "number") {
       await loadMarketMeta(chainId);
     }
+
+    // Fetch claimable rewards for this chain
+    const chainRewards = typeof chainId === "number" ? await getClaimableRewards(chainId, address) : undefined;
 
     const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
     for (const op of opens) {
@@ -241,6 +394,15 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           detailsUrl = `https://app.pendle.finance/markets/${marketAddr}?chainId=${chainIdStr}`;
         }
 
+        // Calculate claimable rewards for this position
+        const { claimableRewards, claimableRewardsValueUSD } = calculateClaimableRewards(
+          chainRewards, 
+          marketId, 
+          kind, 
+          pricesUSD,
+          leg
+        );
+
         out.push({
           protocol: "pendle",
           chain,
@@ -251,6 +413,8 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           lifetimeAPR: 0,
           valueUSD: valuation > 0 ? valuation : 0,
           detailsUrl,
+          claimableRewards,
+          claimableRewardsValueUSD,
         });
       }
     }
