@@ -49,6 +49,11 @@ export default function PortfolioSummaryCard() {
     return relevantPositions.reduce((acc, p) => acc + (p.valueUSD || 0), 0);
   }, [relevantPositions]);
 
+  const totalClaimable = useMemo(() => {
+    if (!relevantPositions) return 0;
+    return relevantPositions.reduce((acc, p) => acc + (p.claimableRewardsValueUSD || 0), 0);
+  }, [relevantPositions]);
+
   // Calculate weighted average yield and nominal yield (in USD)
   const { weightedYield, nominalYieldUSD } = useMemo(() => {
     if (!relevantPositions || relevantPositions.length === 0) return { weightedYield: 0, nominalYieldUSD: 0 };
@@ -135,6 +140,10 @@ export default function PortfolioSummaryCard() {
             <div className="flex justify-between items-baseline">
               <span className="text-sm text-text-muted">Monthly Yield</span>
               <span className="text-sm font-semibold">{formatValue(monthlyYieldInSelected)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-sm text-text-muted">Total Claimable</span>
+              <span className="text-sm font-semibold">{formatValue(totalClaimable)}</span>
             </div>
           </div>
         )}

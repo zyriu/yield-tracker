@@ -52,12 +52,12 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
       chain: "ethereum",
       address,
       asset: usdsSymbol || "USDS",
-      valueUSD,
-      claimableRewards: claimable,
-      claimableRewardsValueUSD,
       apr7d: 0,
       lifetimeAPR: 0,
+      valueUSD,
       detailsUrl: "https://app.spark.fi/farms",
+      claimableRewards: claimable,
+      claimableRewardsValueUSD,
     });
   } catch {
     /* swallow */

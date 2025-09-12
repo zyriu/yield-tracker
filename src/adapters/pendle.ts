@@ -1,6 +1,11 @@
 import axios, { HttpStatusCode } from "axios";
+import { Abi, Address, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
+
+import { abis, mainnetClient, multicall } from "@/lib/web3";
+
+const erc20 = abis.erc20 as Abi;
 
 // Dashboard positions endpoint
 const PENDLE_POSITIONS_API = "https://api-v2.pendle.finance/core/v1/dashboard/positions/database";
@@ -41,7 +46,6 @@ function toBigIntOrZero(x: any): bigint {
 
 // Storage for active market metadata (name and expiry) keyed by `${chainId}-${address}`
 const marketMetaCache: Record<string, { name: string; expiry: string }> = {};
-const activeMarketsFetched: Record<number, boolean> = {};
 
 // Produce a human‑readable asset label.  If metadata exists in
 // marketMetaCache, include the market name and expiry date; otherwise fall
@@ -68,7 +72,7 @@ function assetLabel(kind: "pt" | "yt" | "lp", marketId: string): string {
  * Since Pendle’s API returns a single APY figure (implied/aggregated), we treat that
  * value as both the 7‑day APR and the APY.
  */
-export const fetchPendlePositions: FetchPositions = async ({ address }) => {
+export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD }) => {
   let json: AnyObj;
   try {
     const { data, status } = await axios.get(`${PENDLE_POSITIONS_API}/${address.toLowerCase()}`, {
@@ -81,6 +85,8 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
   } catch {
     return [];
   }
+
+  const blockNumber = await mainnetClient.getBlockNumber();
 
   const positionsArr: AnyObj[] = Array.isArray(json?.positions) ? json.positions : [];
   if (positionsArr.length === 0) return [];
@@ -144,43 +150,10 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
     return undefined;
   }
 
-  // Load active markets for a given chain and populate marketMetaCache
-  async function loadMarketMeta(chainId: number) {
-    if (activeMarketsFetched[chainId]) return;
-    try {
-      const { data, status } = await axios.get(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
-        headers: { accept: "application/json" },
-      });
-      if (status === HttpStatusCode.Ok) {
-        const { markets } = data;
-        if (Array.isArray(markets)) {
-          for (const m of markets) {
-            if (m?.address && m?.name && m?.expiry) {
-              const key = `${chainId}-${m.address}`;
-              marketMetaCache[key] = {
-                name: m.name,
-                expiry: m.expiry,
-              };
-            }
-          }
-        }
-      }
-    } catch {
-      /* empty */
-    }
-
-    activeMarketsFetched[chainId] = true;
-  }
-
   for (const chainBucket of positionsArr) {
     const chainId = toNumber(chainBucket?.chainId);
     const chain: Position["chain"] | "skip" = chainId && CHAIN_MAP[chainId] ? CHAIN_MAP[chainId] : "skip";
     if (chain === "skip") continue;
-
-    // Preload market metadata for this chain
-    if (typeof chainId === "number") {
-      await loadMarketMeta(chainId);
-    }
 
     const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
     for (const op of opens) {
@@ -241,6 +214,34 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           detailsUrl = `https://app.pendle.finance/markets/${marketAddr}?chainId=${chainIdStr}`;
         }
 
+        let claimableRewards = "";
+        let claimableRewardsValueUSD = 0;
+
+        const [claimable] = leg.claimTokenAmounts;
+        if (claimable) {
+          const { token, amount: rawAmount } = claimable;
+          const [id, tokenAddress] = token.split("-");
+
+          let client;
+          switch (CHAIN_MAP[Number(id)]) {
+            case "ethereum":
+              client = mainnetClient;
+              break;
+          }
+
+          if (client) {
+            const [decimals, rawSymbol] = (await multicall(client, [
+              { address: tokenAddress as Address, abi: erc20, functionName: "decimals", blockNumber },
+              { address: tokenAddress as Address, abi: erc20, functionName: "symbol", blockNumber },
+            ])) as [number, string];
+
+            const amount = Number(formatUnits(rawAmount, decimals));
+            const symbol = rawSymbol.replace("SY-", "");
+            claimableRewards = `${amount.toFixed(2)} ${symbol}`;
+            claimableRewardsValueUSD = amount * pricesUSD[symbol.toLowerCase() as keyof typeof pricesUSD] || 0;
+          }
+        }
+
         out.push({
           protocol: "pendle",
           chain,
@@ -251,6 +252,8 @@ export const fetchPendlePositions: FetchPositions = async ({ address }) => {
           lifetimeAPR: 0,
           valueUSD: valuation > 0 ? valuation : 0,
           detailsUrl,
+          claimableRewards,
+          claimableRewardsValueUSD,
         });
       }
     }
