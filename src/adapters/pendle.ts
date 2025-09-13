@@ -40,6 +40,7 @@ function toBigIntOrZero(x: any): bigint {
 
 // Storage for active market metadata (name and expiry) keyed by `${chainId}-${address}`
 const marketMetaCache: Record<string, { name: string; expiry: string }> = {};
+const activeMarketsFetched: Record<number, boolean> = {};
 
 // Produce a human‑readable asset label.  If metadata exists in
 // marketMetaCache, include the market name and expiry date; otherwise fall
@@ -142,12 +143,45 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
     return undefined;
   }
 
+  // Load active markets for a given chain and populate marketMetaCache
+  async function loadMarketMeta(chainId: number) {
+    if (activeMarketsFetched[chainId]) return;
+    try {
+      const { data, status } = await axios.get(`https://api-v2.pendle.finance/core/v1/${chainId}/markets/active`, {
+        headers: { accept: "application/json" },
+      });
+      if (status === HttpStatusCode.Ok) {
+        const { markets } = data;
+        if (Array.isArray(markets)) {
+          for (const m of markets) {
+            if (m?.address && m?.name && m?.expiry) {
+              const key = `${chainId}-${m.address}`;
+              marketMetaCache[key] = {
+                name: m.name,
+                expiry: m.expiry,
+              };
+            }
+          }
+        }
+      }
+    } catch {
+      /* empty */
+    }
+
+    activeMarketsFetched[chainId] = true;
+  }
+
   for (const chainBucket of positionsArr) {
     try {
       const chainId: ChainId | undefined = toNumber(chainBucket?.chainId) as ChainId;
       const chain = chainId && CHAINS[chainId] ? CHAINS[chainId] : "skip";
 
       if (chain === "skip") continue;
+
+      // Preload market metadata for this chain
+      if (typeof chainId === "number") {
+        await loadMarketMeta(chainId);
+      }
 
       const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
       for (const op of opens) {
