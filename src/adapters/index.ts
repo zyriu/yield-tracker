@@ -3,7 +3,7 @@ import type { FetchPositions, Protocol } from "./types";
 import { fetchEthenaPositions } from "@/adapters/ethena";
 import { fetchPendlePositions } from "@/adapters/pendle";
 import { fetchSkyPositions } from "@/adapters/sky";
-import { fetchSparkPositions } from "@/adapters/spark/spark";
+import { fetchSparkPositions } from "@/adapters/spark";
 import { Prices } from "@/lib/coingecko/prices";
 
 export const adapters: Record<Protocol, FetchPositions> = {

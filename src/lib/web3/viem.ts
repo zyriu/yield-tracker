@@ -30,3 +30,28 @@ export const arbitrumClient = createPublicClient({
     })()
   ),
 });
+
+export const hyperliquidClient = createPublicClient({
+  chain: {
+    id: 999,
+    name: "Hyperliquid",
+    nativeCurrency: {
+      name: "Hyperliquid",
+      symbol: "HYPE",
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: "https://rpc.hyperliquid.xyz/evm",
+    },
+  },
+  transport: http(
+    (() => {
+      const sessionRpc = useSessionStore.getState().hyperliquidRpcUrl;
+      if (sessionRpc && sessionRpc.trim().length > 0) {
+        return sessionRpc.trim();
+      }
+
+      return "https://rpc.hyperliquid.xyz/evm";
+    })()
+  ),
+});

@@ -18,6 +18,10 @@ export default function SettingsDrawer() {
   const setArbitrumRPC = useSessionStore((s) => s.setArbitrumRPC);
   const [arbitrumRpcErr, setArbitrumRpcErr] = useState<string | null>(null);
 
+  const hyperliquidRpcUrl = useSessionStore((s) => s.hyperliquidRpcUrl);
+  const setHyperliquidRPC = useSessionStore((s) => s.setHyperliquidRPC);
+  const [hyperliquidRpcErr, setHyperliquidRpcErr] = useState<string | null>(null);
+
   const validateRpc = (v: string) => {
     if (!v) return null;
     try {
@@ -69,6 +73,21 @@ export default function SettingsDrawer() {
             />
             <p className="mt-1 text-xs text-text-muted">Used for reads—stored locally in your browser.</p>
             {arbitrumRpcErr && <p className="mt-1 text-xs text-red-400">{arbitrumRpcErr}</p>}
+          </div>
+          <div>
+            <Label htmlFor="rpc">Hyperliquid RPC URL</Label>
+            <Input
+              id="rpc"
+              placeholder="https://rpc.hyperliquid.xyz/evm"
+              value={hyperliquidRpcUrl}
+              onChange={(e) => {
+                const v = e.target.value;
+                setHyperliquidRPC(v);
+                setHyperliquidRpcErr(validateRpc(v));
+              }}
+            />
+            <p className="mt-1 text-xs text-text-muted">Used for reads—stored locally in your browser.</p>
+            {hyperliquidRpcErr && <p className="mt-1 text-xs text-red-400">{hyperliquidRpcErr}</p>}
           </div>
         </div>
       </div>

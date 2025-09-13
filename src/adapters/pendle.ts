@@ -3,7 +3,8 @@ import { Abi, Address, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
 
-import { abis, mainnetClient, multicall } from "@/lib/web3";
+import { abis, arbitrumClient, mainnetClient, multicall } from "@/lib/web3";
+import { ChainId, CHAINS } from "@/lib/web3/chains";
 
 const erc20 = abis.erc20 as Abi;
 
@@ -17,13 +18,6 @@ const PENDLE_MARKET_DATA_BASE = "https://api-v2.pendle.finance/core/v2";
 const PENDLE_MARKET_DETAILS_BASE = "https://api-v2.pendle.finance/core/v1";
 
 type AnyObj = Record<string, any>;
-
-// Map chain IDs to user‑friendly names. Unknown chains are skipped.
-const CHAIN_MAP: Record<number, Position["chain"] | "skip"> = {
-  1: "ethereum",
-  42161: "arbitrum",
-  999: "hyperliquid",
-};
 
 // Convert arbitrary values to numbers when possible
 function toNumber(x: any): number | undefined {
@@ -151,8 +145,8 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
   }
 
   for (const chainBucket of positionsArr) {
-    const chainId = toNumber(chainBucket?.chainId);
-    const chain: Position["chain"] | "skip" = chainId && CHAIN_MAP[chainId] ? CHAIN_MAP[chainId] : "skip";
+    const chainId: ChainId | undefined = toNumber(chainBucket?.chainId) as ChainId;
+    const chain = chainId && CHAINS[chainId] ? CHAINS[chainId] : "skip";
     if (chain === "skip") continue;
 
     const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
@@ -223,10 +217,12 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
           const [id, tokenAddress] = token.split("-");
 
           let client;
-          switch (CHAIN_MAP[Number(id)]) {
+          switch (CHAINS[Number(id) as ChainId]) {
             case "ethereum":
               client = mainnetClient;
               break;
+            case "arbitrum":
+              client = arbitrumClient;
           }
 
           if (client) {

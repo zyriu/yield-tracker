@@ -18,6 +18,8 @@ type SessionState = {
   setMainnetRPC: (_url: string) => void;
   arbitrumRpcUrl: string;
   setArbitrumRPC: (_url: string) => void;
+  hyperliquidRpcUrl: string;
+  setHyperliquidRPC: (_url: string) => void;
 };
 
 function idFor(addr: string) {
@@ -53,6 +55,8 @@ export const useSessionStore = create<SessionState>()(
       setMainnetRPC: (url) => set({ mainnetRpcUrl: url }),
       arbitrumRpcUrl: "",
       setArbitrumRPC: (url) => set({ arbitrumRpcUrl: url }),
+      hyperliquidRpcUrl: "",
+      setHyperliquidRPC: (url) => set({ hyperliquidRpcUrl: url }),
     }),
     { name: "session" }
   )

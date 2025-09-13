@@ -1,12 +1,14 @@
 import { Abi, Address, formatUnits } from "viem";
 
-import { updateUserDepositData } from "./events";
-
 import type { FetchPositions, Position } from "@/adapters/types";
 
 import { abis, contracts } from "@/lib/web3";
 import { multicall } from "@/lib/web3/multicall";
 import { mainnetClient } from "@/lib/web3/viem";
+import { useSparkStore } from "@/store/useSparkStore";
+
+const CHUNK_SIZE = 50_000n;
+const CONTRACT_CREATION_BLOCK = 22725185n;
 
 const erc20 = abis.erc20 as Abi;
 const rewards = abis.ethereum.spark.rewards as Abi;
@@ -19,10 +21,51 @@ export const fetchSparkPositions: FetchPositions = async ({ address, pricesUSD }
     const user = address as Address;
     const blockNow = await mainnetClient.getBlockNumber();
 
-    // Update deposit tracking in background (async)
-    updateUserDepositData(user).catch((error) => {
-      console.warn("Failed to update Spark deposit data:", error);
-    });
+    const sparkStore = useSparkStore.getState();
+    const existingData = sparkStore.getUserDepositData(address as Address);
+
+    const currentBlock = await mainnetClient.getBlockNumber();
+
+    // Start from the last indexed block + 1, otherwise use contract creation block
+    const fromBlock = existingData ? existingData.lastIndexedBlock + 1n : CONTRACT_CREATION_BLOCK;
+
+    // Don't query if we're already up to date
+    if (fromBlock <= currentBlock) {
+      const data = {
+        lastIndexedBlock: currentBlock,
+        totalClaimed: existingData?.totalClaimed || 0n,
+        totalDeposited: existingData?.totalDeposited || 0n,
+        totalWithdrawn: existingData?.totalWithdrawn || 0n,
+      };
+
+      for (let k = fromBlock; k <= currentBlock; k += CHUNK_SIZE) {
+        let toBlock = k + CHUNK_SIZE - 1n;
+        if (toBlock > currentBlock) toBlock = currentBlock;
+
+        const logs = await mainnetClient.getLogs({
+          address: contracts.ethereum.spark.farm as Address,
+          events: abis.ethereum.spark.rewards.filter(({ type }) => type === "event"),
+          args: { user: address as Address },
+          fromBlock: k,
+          toBlock,
+        });
+
+        for (const log of logs) {
+          switch (log.eventName) {
+            case "RewardPaid":
+              data.totalClaimed += log.args.reward;
+              break;
+            case "Staked":
+              data.totalDeposited += log.args.amount;
+              break;
+            case "Withdrawn":
+              data.totalWithdrawn += log.args.amount;
+          }
+        }
+      }
+
+      sparkStore.setUserDepositData(address as Address, data);
+    }
 
     // --- Current snapshot (1 multicall) ---
     const [rawDeposit, rawEarned, usdsDecimals, usdsSymbol, spkDecimals, spkSymbol] = (await multicall(mainnetClient, [
