@@ -1,7 +1,7 @@
 import { Prices } from "@/lib/coingecko/prices";
+import { Chain } from "@/lib/web3/chains";
 
 export type Protocol = "pendle" | "ethena" | "spark" | "sky";
-export type Chain = "ethereum" | "arbitrum" | "hyperliquid";
 
 export interface Position {
   protocol: Protocol;

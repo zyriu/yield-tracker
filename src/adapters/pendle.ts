@@ -3,7 +3,7 @@ import { Abi, Address, formatUnits } from "viem";
 
 import type { FetchPositions, Position } from "./types";
 
-import { abis, arbitrumClient, mainnetClient, multicall } from "@/lib/web3";
+import { abis, getClientForChain, multicall } from "@/lib/web3";
 import { ChainId, CHAINS } from "@/lib/web3/chains";
 
 const erc20 = abis.erc20 as Abi;
@@ -80,8 +80,6 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
     return [];
   }
 
-  const blockNumber = await mainnetClient.getBlockNumber();
-
   const positionsArr: AnyObj[] = Array.isArray(json?.positions) ? json.positions : [];
   if (positionsArr.length === 0) return [];
 
@@ -145,113 +143,113 @@ export const fetchPendlePositions: FetchPositions = async ({ address, pricesUSD 
   }
 
   for (const chainBucket of positionsArr) {
-    const chainId: ChainId | undefined = toNumber(chainBucket?.chainId) as ChainId;
-    const chain = chainId && CHAINS[chainId] ? CHAINS[chainId] : "skip";
-    if (chain === "skip") continue;
+    try {
+      const chainId: ChainId | undefined = toNumber(chainBucket?.chainId) as ChainId;
+      const chain = chainId && CHAINS[chainId] ? CHAINS[chainId] : "skip";
 
-    const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
-    for (const op of opens) {
-      const marketId: string = String(op?.marketId || "");
+      if (chain === "skip") continue;
 
-      // Pre-fetch APY and market details concurrently
-      const [marketData, marketInfo] = await Promise.all([getMarketData(marketId), getMarketDetails(marketId)]);
-      const protocolName: string | undefined =
-        typeof marketInfo?.protocol === "string" ? marketInfo.protocol : undefined;
+      const opens: AnyObj[] = Array.isArray(chainBucket?.openPositions) ? chainBucket.openPositions : [];
+      for (const op of opens) {
+        const marketId: string = String(op?.marketId || "");
 
-      // For each leg type (pt, yt, lp)
-      const legs: Array<["pt" | "yt" | "lp", AnyObj | undefined]> = [
-        ["pt", op?.pt],
-        ["yt", op?.yt],
-        ["lp", op?.lp],
-      ];
+        // Pre-fetch APY and market details concurrently
+        const [marketData, marketInfo] = await Promise.all([getMarketData(marketId), getMarketDetails(marketId)]);
+        const protocolName: string | undefined =
+          typeof marketInfo?.protocol === "string" ? marketInfo.protocol : undefined;
 
-      for (const [kind, leg] of legs) {
-        if (!leg || typeof leg !== "object") continue;
+        // For each leg type (pt, yt, lp)
+        const legs: Array<["pt" | "yt" | "lp", AnyObj | undefined]> = [
+          ["pt", op?.pt],
+          ["yt", op?.yt],
+          ["lp", op?.lp],
+        ];
 
-        const valuation = toNumber(leg.valuation) ?? 0;
-        const balanceBI = toBigIntOrZero(leg.balance);
-        const activeBI = toBigIntOrZero(leg.activeBalance);
-        if (valuation <= 0 && balanceBI === 0n && activeBI === 0n) continue;
+        for (const [kind, leg] of legs) {
+          if (!leg || typeof leg !== "object") continue;
 
-        const asset = assetLabel(kind, marketId);
+          const valuation = toNumber(leg.valuation) ?? 0;
+          const balanceBI = toBigIntOrZero(leg.balance);
+          const activeBI = toBigIntOrZero(leg.activeBalance);
+          if (valuation <= 0 && balanceBI === 0n && activeBI === 0n) continue;
 
-        let apr7d: number | undefined;
+          const asset = assetLabel(kind, marketId);
 
-        // Derive yields from marketData: use impliedApy for PT,
-        // ytFloatingApy for YT, aggregatedApy for LP.
-        if (marketData) {
-          if (kind === "pt") {
-            const implied = toNumber(marketData.impliedApy);
-            if (implied !== undefined) {
-              apr7d = implied;
-            }
-          } else if (kind === "yt") {
-            const ytFloat = toNumber(marketData.ytFloatingApy);
-            if (ytFloat !== undefined) {
-              apr7d = ytFloat;
-            }
-          } else if (kind === "lp") {
-            const agg = toNumber(marketData.aggregatedApy);
-            if (agg !== undefined) {
-              apr7d = agg;
+          let apr7d: number | undefined;
+
+          // Derive yields from marketData: use impliedApy for PT,
+          // ytFloatingApy for YT, aggregatedApy for LP.
+          if (marketData) {
+            if (kind === "pt") {
+              const implied = toNumber(marketData.impliedApy);
+              if (implied !== undefined) {
+                apr7d = implied;
+              }
+            } else if (kind === "yt") {
+              const ytFloat = toNumber(marketData.ytFloatingApy);
+              if (ytFloat !== undefined) {
+                apr7d = ytFloat;
+              }
+            } else if (kind === "lp") {
+              const agg = toNumber(marketData.aggregatedApy);
+              if (agg !== undefined) {
+                apr7d = agg;
+              }
             }
           }
-        }
 
-        // Build a details URL pointing to the Pendle app.  Use the market
-        // address directly and append the chain ID as a query parameter.  This
-        // mirrors the structure used on pendle.finance (e.g.
-        // markets/<address>?chainId=1).
-        let detailsUrl: string | undefined;
-        const [chainIdStr, marketAddr] = marketId.split("-");
-        if (chainIdStr && marketAddr) {
-          detailsUrl = `https://app.pendle.finance/markets/${marketAddr}?chainId=${chainIdStr}`;
-        }
-
-        let claimableRewards = "";
-        let claimableRewardsValueUSD = 0;
-
-        const [claimable] = leg.claimTokenAmounts;
-        if (claimable) {
-          const { token, amount: rawAmount } = claimable;
-          const [id, tokenAddress] = token.split("-");
-
-          let client;
-          switch (CHAINS[Number(id) as ChainId]) {
-            case "ethereum":
-              client = mainnetClient;
-              break;
-            case "arbitrum":
-              client = arbitrumClient;
+          // Build a details URL pointing to the Pendle app.  Use the market
+          // address directly and append the chain ID as a query parameter.  This
+          // mirrors the structure used on pendle.finance (e.g.
+          // markets/<address>?chainId=1).
+          let detailsUrl: string | undefined;
+          const [chainIdStr, marketAddr] = marketId.split("-");
+          if (chainIdStr && marketAddr) {
+            detailsUrl = `https://app.pendle.finance/markets/${marketAddr}?chainId=${chainIdStr}`;
           }
 
-          if (client) {
-            const [decimals, rawSymbol] = (await multicall(client, [
-              { address: tokenAddress as Address, abi: erc20, functionName: "decimals", blockNumber },
-              { address: tokenAddress as Address, abi: erc20, functionName: "symbol", blockNumber },
-            ])) as [number, string];
+          let claimableRewards = "";
+          let claimableRewardsValueUSD = 0;
 
-            const amount = Number(formatUnits(rawAmount, decimals));
-            const symbol = rawSymbol.replace("SY-", "");
-            claimableRewards = `${amount.toFixed(2)} ${symbol}`;
-            claimableRewardsValueUSD = amount * pricesUSD[symbol.toLowerCase() as keyof typeof pricesUSD] || 0;
+          const [claimable] = leg.claimTokenAmounts;
+          if (claimable) {
+            const { token, amount: rawAmount } = claimable;
+            const [id, tokenAddress] = token.split("-");
+
+            const client = getClientForChain(Number(id));
+
+            // TODO hyperevm client doesn't support multicall yet
+            if (id !== "999" && client) {
+              const blockNumber = await client.getBlockNumber();
+              const [decimals, rawSymbol] = (await multicall(client, [
+                { address: tokenAddress as Address, abi: erc20, functionName: "decimals", blockNumber },
+                { address: tokenAddress as Address, abi: erc20, functionName: "symbol", blockNumber },
+              ])) as [number, string];
+
+              const amount = Number(formatUnits(rawAmount, decimals));
+              const symbol = rawSymbol.replace("SY-", "");
+              claimableRewards = `${amount.toFixed(2)} ${symbol}`;
+              claimableRewardsValueUSD = amount * pricesUSD[symbol.toLowerCase() as keyof typeof pricesUSD] || 0;
+            }
           }
-        }
 
-        out.push({
-          protocol: "pendle",
-          chain,
-          address,
-          asset,
-          marketProtocol: protocolName,
-          apr7d,
-          lifetimeAPR: 0,
-          valueUSD: valuation > 0 ? valuation : 0,
-          detailsUrl,
-          claimableRewards,
-          claimableRewardsValueUSD,
-        });
+          out.push({
+            protocol: "pendle",
+            chain,
+            address,
+            asset,
+            marketProtocol: protocolName,
+            apr7d,
+            lifetimeAPR: 0,
+            valueUSD: valuation > 0 ? valuation : 0,
+            detailsUrl,
+            claimableRewards,
+            claimableRewardsValueUSD,
+          });
+        }
       }
+    } catch (err) {
+      console.error(err);
     }
   }
 

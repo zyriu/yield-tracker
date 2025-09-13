@@ -1,3 +1,4 @@
+// src/state/sessionStore.ts (or update existing file)
 import { isAddress } from "viem";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -14,16 +15,37 @@ type SessionState = {
   removeAddress: (_id: string) => void;
   setAddressLabel: (_id: string, _label?: string) => void;
 
-  mainnetRpcUrl: string;
-  setMainnetRPC: (_url: string) => void;
+  // RPC URLs for chains
+  ethereumRpcUrl: string;
+  setEthereumRPC: (_url: string) => void;
+
+  optimismRpcUrl: string;
+  setOptimismRPC: (_url: string) => void;
+
+  sonicRpcUrl: string;
+  setSonicRPC: (_url: string) => void;
+
+  berachainRpcUrl: string;
+  setBerachainRPC: (_url: string) => void;
+
+  bnbSmartChainRpcUrl: string;
+  setBnbSmartChainRPC: (_url: string) => void;
+
+  mantleRpcUrl: string;
+  setMantleRPC: (_url: string) => void;
+
+  baseRpcUrl: string;
+  setBaseRPC: (_url: string) => void;
+
   arbitrumRpcUrl: string;
   setArbitrumRPC: (_url: string) => void;
-  hyperliquidRpcUrl: string;
-  setHyperliquidRPC: (_url: string) => void;
+
+  hyperevmRpcUrl: string;
+  setHyperevmRPC: (_url: string) => void;
 };
 
 function idFor(addr: string) {
-  return `${addr.toLowerCase()}`;
+  return addr.toLowerCase();
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -34,29 +56,43 @@ export const useSessionStore = create<SessionState>()(
         if (!isAddress(address as `0x${string}`)) {
           throw new Error("Invalid EVM address");
         }
-
         const id = idFor(address);
-        const exists = get().addresses.some((a) => a.id === id);
-        if (exists) return;
-
-        set((s) => ({
-          addresses: [...s.addresses, { id, address, label }],
-        }));
+        if (get().addresses.some((a) => a.id === id)) return;
+        set((s) => ({ addresses: [...s.addresses, { id, address, label }] }));
       },
-      removeAddress: (id) => {
-        set((s) => ({ addresses: s.addresses.filter((a) => a.id !== id) }));
-      },
-      setAddressLabel: (id, label) => {
+      removeAddress: (id) => set((s) => ({ addresses: s.addresses.filter((a) => a.id !== id) })),
+      setAddressLabel: (id, label) =>
         set((s) => ({
           addresses: s.addresses.map((a) => (a.id === id ? { ...a, label: label || undefined } : a)),
-        }));
-      },
-      mainnetRpcUrl: "",
-      setMainnetRPC: (url) => set({ mainnetRpcUrl: url }),
+        })),
+
+      // RPC fields + setters
+      ethereumRpcUrl: "",
+      setEthereumRPC: (url) => set({ ethereumRpcUrl: url }),
+
+      optimismRpcUrl: "",
+      setOptimismRPC: (url) => set({ optimismRpcUrl: url }),
+
+      sonicRpcUrl: "",
+      setSonicRPC: (url) => set({ sonicRpcUrl: url }),
+
+      berachainRpcUrl: "",
+      setBerachainRPC: (url) => set({ berachainRpcUrl: url }),
+
+      bnbSmartChainRpcUrl: "",
+      setBnbSmartChainRPC: (url) => set({ bnbSmartChainRpcUrl: url }),
+
+      mantleRpcUrl: "",
+      setMantleRPC: (url) => set({ mantleRpcUrl: url }),
+
+      baseRpcUrl: "",
+      setBaseRPC: (url) => set({ baseRpcUrl: url }),
+
       arbitrumRpcUrl: "",
       setArbitrumRPC: (url) => set({ arbitrumRpcUrl: url }),
-      hyperliquidRpcUrl: "",
-      setHyperliquidRPC: (url) => set({ hyperliquidRpcUrl: url }),
+
+      hyperevmRpcUrl: "",
+      setHyperevmRPC: (url) => set({ hyperevmRpcUrl: url }),
     }),
     { name: "session" }
   )
